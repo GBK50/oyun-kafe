@@ -122,7 +122,7 @@ document.head.insertAdjacentHTML('beforeend',`<style>
 duration=function(n){n=Math.max(0,Math.floor(Number(n)||0));return n<60?n+' dk':Math.floor(n/60)+' sa '+(n%60)+' dk'};
 function liveClock(){let d=new Date();return `<div class=live-clock>${d.toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'})}<small>${d.toLocaleDateString('tr-TR')}</small></div>`}
 const shellWithClock=AppShell;
-AppShell=function(content){let html=shellWithClock(content);return html.replace('<div class=user>','${liveClock()}<div class=user>')};
+AppShell=function(content){let html=shellWithClock(content);return html.replace('<div class=user>',liveClock()+'<div class=user>')};
 const goWithDefaults=go;
 go=function(page){if(page==='Ayarlar')S.settingsTab='Sistem Logları';goWithDefaults(page)};
 const remoteProfileWithHome=loadRemoteProfile;
