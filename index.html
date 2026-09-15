@@ -380,5 +380,7 @@ const syncBeforeErrorVisibility=syncToSupabase;
 syncToSupabase=async function(){try{return await syncBeforeErrorVisibility()}catch(e){S.syncStatus='Senkronizasyon başarısız';S.syncError=String(e?.message||e||'Bilinmeyen hata');localStorage.setItem('oyunKafe',JSON.stringify({...S,modal:null,toast:null}));render();throw e}};
 const appShellBeforeSyncDiagnostic=AppShell;
 AppShell=function(content){let result=appShellBeforeSyncDiagnostic(content);let message=S.syncStatus==='Senkronizasyon başarısız'&&S.syncError?`Senkronizasyon başarısız: ${S.syncError}`:null;return message?result.replace('class="sync-indicator"',`class="sync-indicator" title="${message.replace(/&/g,'&amp;').replace(/"/g,'&quot;')}"`):result};
+/* Kullanıcı, tekrar denemede Supabase'in gerçek hata nedenini görür. */
+retrySync=async function(){if(!navigator.onLine){toast('İnternet bağlantısı yok. Kayıtlar cihazda güvenle bekliyor.');return}try{await syncToSupabase();toast('Senkronizasyon tamamlandı.')}catch(e){let detail=String(e?.message||e||'Bilinmeyen hata');toast(`Senkronizasyon başarısız: ${detail}`)}};
 render();restoreSession();
 </script></body></html>
