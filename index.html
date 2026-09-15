@@ -350,6 +350,7 @@ async function retrySync(){if(!navigator.onLine){toast('İnternet bağlantısı 
 window.addEventListener('offline',()=>{S.syncStatus='Çevrimdışı — kayıt cihazda saklandı';S.pendingSync=true;localStorage.setItem('oyunKafe',JSON.stringify(S));render()});
 window.addEventListener('online',()=>{S.syncStatus='Bağlantı geldi — senkronlanıyor…';render();scheduleRemoteSync()});
 const appShellBeforeResilience=AppShell;
-AppShell=function(content){let banner=!navigator.onLine?`<div class="sync-banner offline">● Çevrimdışısınız. Yeni kayıtlar cihazda saklanır ve bağlantı gelince otomatik gönderilir.</div>`:S.pendingSync||S.syncStatus==='Senkronizasyon bekliyor'?`<div class=sync-banner>● Bazı kayıtlar Supabase'e gönderilmeyi bekliyor.<button class=ghost onclick="retrySync()">Tekrar Dene</button></div>`:'';return appShellBeforeResilience(content).replace('<main class=main>',`<main class=main>${banner}`)};
+/* Bağlantı varken bekleyen-kayıt bandı görünmez. Yalnızca gerçek bir hata olursa tekrar deneme sunulur. */
+AppShell=function(content){let failed=S.syncStatus==='Senkronizasyon başarısız';let banner=!navigator.onLine?`<div class="sync-banner offline">● Çevrimdışısınız. Yeni kayıtlar cihazda saklanır ve bağlantı gelince otomatik gönderilir.</div>`:failed?`<div class=sync-banner>● Senkronizasyon başarısız oldu.<button class=ghost onclick="retrySync()">Tekrar Dene</button></div>`:'';return appShellBeforeResilience(content).replace('<main class=main>',`<main class=main>${banner}`)};
 render();restoreSession();
 </script></body></html>
