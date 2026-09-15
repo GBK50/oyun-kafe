@@ -256,5 +256,15 @@ restoreSession=async function(){
   if(data.session){try{await loadRemoteProfile(data.session.user);await loadOperationalData();return}catch(_){try{await supabaseClient.auth.signOut({scope:'local'})}catch(_){}}}
   S.loggedOut=true;S.page='Ana Sayfa';render();
 };
+/* Kayıt sahibi değişmez: başka bir cihazdan düzenleme/senkron yapılması,
+   çocuğu veya ödeme kaydını oluşturan personeli asla değiştiremez. */
+const sbUpsertBeforeCreatorLock=sbUpsert;
+sbUpsert=async function(table,row){
+  if(row?.client_ref&&Object.prototype.hasOwnProperty.call(row,'created_by')){
+    const {data:existing}=await supabaseClient.from(table).select('created_by').eq('client_ref',row.client_ref).maybeSingle();
+    if(existing?.created_by) row={...row,created_by:existing.created_by};
+  }
+  return sbUpsertBeforeCreatorLock(table,row);
+};
 render();restoreSession();
 </script></body></html>
