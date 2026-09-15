@@ -352,5 +352,10 @@ window.addEventListener('online',()=>{S.syncStatus='Bağlantı geldi — senkron
 const appShellBeforeResilience=AppShell;
 /* Bağlantı varken bekleyen-kayıt bandı görünmez. Yalnızca gerçek bir hata olursa tekrar deneme sunulur. */
 AppShell=function(content){let failed=S.syncStatus==='Senkronizasyon başarısız';let banner=!navigator.onLine?`<div class="sync-banner offline">● Çevrimdışısınız. Yeni kayıtlar cihazda saklanır ve bağlantı gelince otomatik gönderilir.</div>`:failed?`<div class=sync-banner>● Senkronizasyon başarısız oldu.<button class=ghost onclick="retrySync()">Tekrar Dene</button></div>`:'';return appShellBeforeResilience(content).replace('<main class=main>',`<main class=main>${banner}`)};
+/* Koyu temada takvim de uygulamanın kart diliyle aynı paleti kullanır. */
+document.head.insertAdjacentHTML('beforeend',`<style>
+.cal{background:#fff;border-color:#dbe5ec;box-shadow:0 4px 14px #17324a0d}.cal .day{background:#fff;color:#6d8191;border-color:#dbe5ec}.cal .day:nth-child(-n+7){background:#f3f7fa;color:#52708a;min-height:auto;padding:12px 8px;font-size:12px;letter-spacing:.04em}.cal .day>b{color:inherit}.cal .res{background:#d9f3f0;color:#087d76;border-left:3px solid #12a398;border-radius:7px;padding:6px 7px;font-weight:750}
+.theme-dark .cal{background:#1d2b38;border-color:#344b5d;box-shadow:none}.theme-dark .cal .day{background:#1d2b38;color:#9eb2c0;border-color:#344b5d}.theme-dark .cal .day:nth-child(-n+7){background:#263948;color:#c7d5de}.theme-dark .cal .res{background:#173f42;color:#bff3ed;border-left-color:#16b7a8;box-shadow:inset 0 0 0 1px #2c7772}
+</style>`);
 render();restoreSession();
 </script></body></html>
