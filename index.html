@@ -292,5 +292,19 @@ const loadOperationalDataBeforeRoleSecurity=loadOperationalData;
 loadOperationalData=async function(){return isAdmin()?loadOperationalDataBeforeRoleSecurity():loadStaffOperationalData()};
 const syncToSupabaseBeforeRoleSecurity=syncToSupabase;
 syncToSupabase=async function(){return isAdmin()?syncToSupabaseBeforeRoleSecurity():syncStaffOperationalData()};
+/* Yönetici için taşınabilir operasyon yedeği. Şifreler ve Supabase gizli anahtarları asla yedeğe eklenmez. */
+function downloadOperationalBackup(){
+  if(!isAdmin())return toast('Yedek alma yetkiniz bulunmuyor.');
+  const backup={format:'oyun-kafe-backup',version:1,createdAt:new Date().toISOString(),data:{children:S.children,relationships:S.relationships,payments:S.payments,memberships:S.memberships,reservations:S.reservations,pricing:S.pricing,packages:S.settings}};
+  const blob=new Blob([JSON.stringify(backup,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');
+  a.href=url;a.download='oyun-kafe-yedek-'+new Date().toISOString().slice(0,10)+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);toast('Operasyon yedeği indirildi.');
+}
+function chooseBackupFile(){document.getElementById('backupFile')?.click()}
+function restoreOperationalBackup(input){
+  const file=input.files?.[0];if(!file)return;
+  const reader=new FileReader();reader.onload=()=>{try{const backup=JSON.parse(String(reader.result||'')),d=backup?.data;if(backup?.format!=='oyun-kafe-backup'||!d||!Array.isArray(d.children))throw new Error('Geçerli bir Oyun Kafe yedek dosyası değil.');if(!confirm('Yedekteki operasyon verileri uygulamaya aktarılsın mı? Mevcut Supabase kayıtları silinmez; yedekteki kayıtlar güvenli biçimde eklenir veya güncellenir.'))return;S.children=d.children;S.relationships=d.relationships||[];S.payments=d.payments||[];S.memberships=d.memberships||[];S.reservations=d.reservations||[];S.pricing=d.pricing||S.pricing;S.settings=d.packages||S.settings;S.pendingSync=true;save();toast('Yedek içe aktarıldı; Supabase senkronizasyonu başlatıldı.')}catch(e){toast(e.message||'Yedek okunamadı.')}finally{input.value=''}};reader.readAsText(file);
+}
+const reportsBeforeBackup=Reports;
+Reports=function(){let html=reportsBeforeBackup();if(!isAdmin())return html;let backupCard=`<section class="card" style="padding:20px;margin-top:18px"><h2>Veri Yedekleme ve Geri Yükleme</h2><p class=sub>Çocuklar, seanslar, molalar, loglar, ödemeler, üyelikler, rezervasyonlar ve ücret ayarlarının JSON yedeğini indirir. Şifreler ve gizli anahtarlar yedeğe dahil edilmez.</p><div class=toolbar><button class=primary onclick="downloadOperationalBackup()">↓ Tam Yedek İndir</button><button class=ghost onclick="chooseBackupFile()">↑ Yedekten Geri Yükle</button><input id=backupFile type=file accept="application/json,.json" style="display:none" onchange="restoreOperationalBackup(this)"></div><p class=sub style="margin-top:12px">Geri yükleme mevcut Supabase kayıtlarını silmez; aynı kayıtları günceller veya eksik kayıtları ekler.</p></section>`;return html.replace('</main>',backupCard+'</main>')};
 render();restoreSession();
 </script></body></html>
