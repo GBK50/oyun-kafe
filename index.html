@@ -327,5 +327,9 @@ Reports=function(){let html=reportsWithPeriodLabel(),period=S.reportRange||'Bu A
 document.head.insertAdjacentHTML('beforeend',`<style>
 .theme-dark .form label{color:#b9c6cf}.theme-dark .form textarea{background:#182735;color:#eaf2f6;border:1px solid #405464;min-height:92px}.theme-dark .form textarea::placeholder{color:#91a5b7;opacity:1}.theme-dark .form textarea:focus{border-color:#18a99e;outline:2px solid #18a99e33}
 </style>`);
+/* Senkron sırasında geçici "Sistem" değeri kartta görünmez; son bilinen gerçek personel adı korunur. */
+const creatorNameCache=new Map();
+const sessionBeforeCreatorStability=Session;
+Session=function(c){let key=String(c.remoteId||c.id);if(c.creator&&c.creator!=='Sistem')creatorNameCache.set(key,c.creator);else if(creatorNameCache.has(key))c={...c,creator:creatorNameCache.get(key)};return sessionBeforeCreatorStability(c)};
 render();restoreSession();
 </script></body></html>
