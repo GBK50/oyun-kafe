@@ -493,8 +493,10 @@ localStorage.setItem('oyunKafe',JSON.stringify({...S,toast:null}));
 const alarmEventNames=new Set(['Alarm Kuruldu','Alarm Ertelendi','Alarm Çaldı','Alarm Tamamlandı']);
 S.alarmAlert=null;S.alarmInfoChild=null;S.alarmCache={};S.alarmDismissals={};
 for(let c of S.children||[]){delete c.alarmAt;c.logs=(c.logs||[]).filter(l=>!alarmEventNames.has(l[0]))}
+S.notices=(S.notices||[]).filter(n=>!/alarm/i.test(String(n.text||'')));
 restoreAlarmsFromLogs=function(){S.alarmAlert=null;for(let c of S.children||[]){delete c.alarmAt;c.logs=(c.logs||[]).filter(l=>!alarmEventNames.has(l[0]))}};
 openAlarmFor=function(){};
-Session=sessionBeforeAlarmModuleRemoval;
+Session=sessionBeforeAlarmIndicator;
+localStorage.setItem('oyunKafe',JSON.stringify({...S,modal:null,toast:null}));
 render();restoreSession();
 </script></body></html>
