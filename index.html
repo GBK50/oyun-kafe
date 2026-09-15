@@ -144,5 +144,21 @@ async function loadOperationalData(){let [childrenR,visitsR,breaksR,logsR,paymen
 const loginWithRemoteData=login;
 login=async function(){await loginWithRemoteData();if(!S.loggedOut)try{await loadOperationalData()}catch(e){S.loginError='Veriler yüklenemedi: '+e.message;render()}};
 restoreSession=async function(){let {data}=await supabaseClient.auth.getSession();if(data.session){try{await loadRemoteProfile(data.session.user);await loadOperationalData();return}catch(e){console.warn('Supabase load:',e.message);await supabaseClient.auth.signOut()}}S.loggedOut=true;render()};
+/* Never lose a local change when the page is refreshed before sync finishes. */
+function scheduleRemoteSync(){if(!remoteReady||!remoteUser())return;clearTimeout(remoteSyncTimer);remoteSyncTimer=setTimeout(()=>syncToSupabase().catch(e=>console.warn('Supabase sync:',e.message)),0)}
+save=function(){S.pendingSync=true;localStorage.setItem('oyunKafe',JSON.stringify(S));render();scheduleRemoteSync()};
+const syncWithPendingFlag=syncToSupabase;
+syncToSupabase=async function(){await syncWithPendingFlag();if(remoteReady){S.pendingSync=false;localStorage.setItem('oyunKafe',JSON.stringify(S))}};
+const loadDataWithPendingSync=loadOperationalData;
+loadOperationalData=async function(){if(S.pendingSync){remoteReady=true;await syncToSupabase()}await loadDataWithPendingSync();};
+/* Personel listesi de tüm cihazlarda ayarlar kaydı içinde korunur.
+   Yeni personelin uygulamaya giriş yapabilmesi için ayrıca Supabase Auth kullanıcısı oluşturulmalıdır. */
+const syncWithStaff=syncToSupabase;
+syncToSupabase=async function(){await syncWithStaff();if(remoteReady&&remoteUser()){await supabaseClient.from('app_settings').upsert({key:'operasyon_ayarlari',value:{pricing:S.pricing,packages:S.settings,staff:S.staff},updated_by:remoteUser()})}};
+const loadDataWithStaff=loadOperationalData;
+loadOperationalData=async function(){await loadDataWithStaff();let {data,error}=await supabaseClient.from('app_settings').select('value').eq('key','operasyon_ayarlari').maybeSingle();if(!error&&Array.isArray(data?.value?.staff)){S.staff=data.value.staff;localStorage.setItem('oyunKafe',JSON.stringify(S));render()}};
+/* Toast messages are temporary UI feedback, never persistent application data. */
+save=function(){S.pendingSync=true;localStorage.setItem('oyunKafe',JSON.stringify({...S,toast:null}));render();scheduleRemoteSync()};
+S.toast=null;
 render();restoreSession();
 </script></body></html>
