@@ -235,5 +235,26 @@ const modalBeforeManualBreak=Modal;
 Modal=function(){return S.modal==='break'?ManualBreakModal():modalBeforeManualBreak()};
 const submitBeforeManualBreak=submit;
 submit=async function(type){if(type==='break'&&S.breakManual){let c=child(),manualTime=val('manualBreakTime');if(!manualTime){toast('Mola başlangıç saatini girin.');return}let now=new Date(),datePart=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0'),startedAt=new Date(datePart+'T'+manualTime+':00');if(Number.isNaN(+startedAt)||startedAt>now){toast('Bugünden ve şu andan ileri bir saat seçilemez.');return}if(startedAt<new Date(c.entered)){toast('Mola saati giriş saatinden önce olamaz.');return}c.status='MOLADA';c.breaks.push({start:startedAt.toISOString()});log(c,'Molaya Çıktı','Mola manuel saat ile başlatıldı: '+manualTime);S.breakManual=false;S.manualBreakTime='';closeModal();toast('Mola '+manualTime+' itibarıyla başlatıldı.');save();return}return submitBeforeManualBreak(type)};
+/* Her yeni uygulama açılışında kullanıcı adı ve şifre istenir; önceki oturum geri yüklenmez. */
+restoreSession=async function(){
+  try{await supabaseClient.auth.signOut({scope:'local'})}catch(_){/* Ağ yoksa dahi giriş ekranı gösterilir. */}
+  S.loggedOut=true;
+  S.page='Ana Sayfa';
+  S.loginError='';
+  render();
+};
+/* İsteğe bağlı oturum hatırlama. İşaretlenmezse uygulama açıldığında oturum kapatılır. */
+Login=function(){let checked=S.rememberPreference||localStorage.getItem('oyunKafeRememberMe')==='true';return `<div class=login-screen><section class="card login-card"><div class=brand><i>○</i>Oyun Kafe</div><h1>Oturumu Aç</h1><p class=sub>Kullanıcı adı ve şifrenizle güvenli giriş yapın.</p>${S.loginError?`<div class="hint" style="background:#fff0f0;color:#a33">${S.loginError}</div>`:''}<div class=form style="text-align:left"><label class=full>Kullanıcı adı<input id=loginUsername autocomplete=username placeholder="Örn. Gokcek"></label><label class=full>Şifre<input id=loginPassword type=password autocomplete=current-password placeholder="Şifreniz"></label></div><label style="display:flex;align-items:center;gap:8px;margin-top:14px;cursor:pointer;font-size:13px"><input id=rememberMe type=checkbox ${checked?'checked':''} onchange="S.rememberPreference=this.checked"> Beni hatırla</label><button class=primary style="width:100%;margin-top:18px" onclick="login()">Oturumu Aç</button></section></div>`};
+const loginBeforeRemember=login;
+login=async function(){let remember=Boolean(document.getElementById('rememberMe')?.checked);await loginBeforeRemember();if(!S.loggedOut){localStorage.setItem('oyunKafeRememberMe',remember?'true':'false');S.rememberPreference=remember}};
+const logoutBeforeRemember=logout;
+logout=function(){localStorage.removeItem('oyunKafeRememberMe');S.rememberPreference=false;return logoutBeforeRemember()};
+restoreSession=async function(){
+  const remember=localStorage.getItem('oyunKafeRememberMe')==='true';
+  if(!remember){try{await supabaseClient.auth.signOut({scope:'local'})}catch(_){/* giriş ekranı yine gösterilir */}S.loggedOut=true;S.page='Ana Sayfa';S.loginError='';render();return}
+  let {data}=await supabaseClient.auth.getSession();
+  if(data.session){try{await loadRemoteProfile(data.session.user);await loadOperationalData();return}catch(_){try{await supabaseClient.auth.signOut({scope:'local'})}catch(_){}}}
+  S.loggedOut=true;S.page='Ana Sayfa';render();
+};
 render();restoreSession();
 </script></body></html>
