@@ -200,5 +200,20 @@ const syncWithStatus=syncToSupabase;
 syncToSupabase=async function(){S.syncStatus='Kaydediliyor…';render();try{await syncWithStatus();S.syncStatus='Supabase ile kaydedildi'}catch(e){S.syncStatus='Senkronizasyon bekliyor';throw e}finally{render()}};
 const shellWithSyncStatus=AppShell;
 AppShell=function(content){let label=S.syncStatus||'Supabase ile senkron';return shellWithSyncStatus(content).replace('<div class=user>',`<span class=sync-indicator>● ${label}</span><div class=user>`) };
+/* Staff registration creates both an Auth account and its application profile. */
+function StaffAccountModal(){return `<div class=modal-bg onclick="if(event.target===this)closeModal()"><section class=modal><div class=modal-head><h2>Personel Ekle</h2><p>Kaydedildiğinde personel hesabı Supabase’de oluşturulur.</p></div><div class=modal-body><div class=hint>Personel, belirlediğiniz kullanıcı adı ve şifreyle uygulamaya giriş yapabilir. Şifre en az 8 karakter olmalıdır.</div><div class=form><label>Ad Soyad<input id=sName autocomplete=name></label><label>Telefon<input id=sPhone inputmode=numeric></label><label>Kullanıcı adı<input id=sUser autocomplete=username placeholder="Örn. oya.kutlu"></label><label>Şifre<input id=sPassword type=password autocomplete=new-password minlength=8></label><label>Rol<select id=sRole><option>Personel</option><option>Yönetici</option></select></label><label>Durum<select id=sStatus><option>Aktif</option><option>Pasif</option></select></label></div></div><div class=modal-foot><button class=ghost onclick="closeModal()">Vazgeç</button><button class=primary onclick="submit('staff')">Hesabı Oluştur</button></div></section></div>`}
+const submitWithStaffAccount=submit;
+submit=async function(type){if(type!=='staff')return submitWithStaffAccount(type);let fullName=val('sName'),username=val('sUser'),phone=val('sPhone'),password=document.getElementById('sPassword')?.value||'',role=val('sRole'),status=val('sStatus');if(!fullName||!username||password.length<8){toast('Ad soyad, kullanıcı adı ve en az 8 karakterli şifre zorunludur.');return}let {data,error}=await supabaseClient.functions.invoke('create-staff-account',{body:{fullName,username,phone,password,role,status}});if(error||data?.error){toast(data?.error||error?.message||'Personel hesabı oluşturulamadı.');return}S.staff.push(data.profile);S.modal=null;toast(fullName+' için giriş hesabı oluşturuldu.');save()};
+const modalWithStaffAccount=Modal;
+Modal=function(){return S.modal==='staff'?StaffAccountModal():modalWithStaffAccount()};
+/* Personel silme: geçmişi bozmayacak şekilde hesabı kapatır ve listeden kaldırır. */
+async function deleteStaffAccount(staffId, staffName){
+  if(!confirm(`${staffName} adlı personelin giriş hesabı kapatılsın ve listeden kaldırılsın mı? Geçmiş işlem kayıtları korunur.`)) return;
+  let {data,error}=await supabaseClient.functions.invoke('deactivate-staff-account',{body:{staffId}});
+  if(error||data?.error){toast(data?.error||error?.message||'Personel silinemedi.');return}
+  S.staff=S.staff.filter(x=>String(x.id)!==String(staffId));
+  toast(`${staffName} listeden kaldırıldı; giriş hesabı kapatıldı.`);save();
+}
+Staff=function(){if(!isAdmin())return restricted();return AppShell(`<div class=page-head><div><h1>Personel</h1><p>${S.staff.length} personel</p></div><button class=primary onclick="show('staff')">＋ Personel Ekle</button></div><div class=page-table><table class=table><thead><tr><th>PERSONEL</th><th>İLETİŞİM</th><th>ROL</th><th>SON GİRİŞ</th><th>DURUM</th><th>İŞLEM</th></tr></thead><tbody>${S.staff.map((x,i)=>`<tr><td><span class=round-avatar style="background:#087e75;color:white">${x.name[0]}</span><b>${x.name}</b><br><small class=sub>@${x.username}</small></td><td>${x.phone||'—'}</td><td><span class=tag>${x.role}</span></td><td>—</td><td><span class="state ${x.status==='Aktif'?'green':'red'}">${x.status}</span></td><td>${String(x.id)===String(remoteProfile?.id)?'—':`<button class=danger onclick="deleteStaffAccount(${JSON.stringify(String(x.id))},${JSON.stringify(x.name)})">Sil</button>`}</td></tr>`).join('')}</tbody></table></div>`) };
 render();restoreSession();
 </script></body></html>
