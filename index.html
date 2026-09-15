@@ -407,6 +407,10 @@ AppShell=function(content){return appShellBeforeBrandLogo(content).replaceAll('<
 const loginBeforeBrandLogo=Login;
 Login=function(){return loginBeforeBrandLogo().replaceAll('<div class=brand><i>○</i>Oyun Kafe</div>','<div class=brand><img class=site-logo src="oyun-kafe-logo.png" alt="Oyun Kafe logosu">Oyun Kafe</div>')};
 document.head.insertAdjacentHTML('beforeend',`<style>.brand .site-logo{width:34px;height:34px;object-fit:contain;vertical-align:middle;margin-right:8px}.login-card .brand .site-logo{width:48px;height:48px;margin-right:10px}@media(max-width:700px){.brand .site-logo{width:30px;height:30px;margin-right:7px}}</style>`);
+/* Bildirim düğmesinde kullanıcının seçtiği zil simgesi gösterilir. */
+const appShellBeforeBellLogo=AppShell;
+AppShell=function(content){return appShellBeforeBellLogo(content).replace(/<button class=bell onclick="S\.showNotices=!S\.showNotices;render\(\)">♟([\s\S]*?)<\/button>/,'<button class=bell aria-label="Bildirimler" onclick="S.showNotices=!S.showNotices;render()"><img class=notification-bell-logo src="bildirim-zili.png" alt="">$1</button>')};
+document.head.insertAdjacentHTML('beforeend',`<style>.bell .notification-bell-logo{display:block;width:19px;height:19px;object-fit:contain}.theme-dark .bell .notification-bell-logo{filter:invert(1) brightness(1.8)}</style>`);
 document.head.insertAdjacentHTML('beforeend',`<style>.notification-settings{padding:20px;max-width:680px}.notification-settings h3{margin:0}.notify-setting{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 0;border-bottom:1px solid var(--line)}.notify-setting b,.notify-setting small{display:block}.notify-setting small{margin-top:4px;color:var(--muted)}.theme-dark .notification-settings{background:#1d2b38}.theme-dark .notify-setting{border-color:#304354}@media(max-width:520px){.notify-setting{align-items:flex-start;flex-direction:column}.notify-setting button{width:100%}}</style>`);
 render();restoreSession();
 </script></body></html>
