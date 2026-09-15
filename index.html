@@ -411,6 +411,8 @@ document.head.insertAdjacentHTML('beforeend',`<style>.brand .site-logo{width:34p
 const appShellBeforeBellLogo=AppShell;
 AppShell=function(content){return appShellBeforeBellLogo(content).replace(/<button class=bell onclick="S\.showNotices=!S\.showNotices;render\(\)">♟([\s\S]*?)<\/button>/,'<button class=bell aria-label="Bildirimler" onclick="S.showNotices=!S.showNotices;render()"><img class=notification-bell-logo src="bildirim-zili.png" alt="">$1</button>')};
 document.head.insertAdjacentHTML('beforeend',`<style>.bell .notification-bell-logo{display:block;width:19px;height:19px;object-fit:contain}.theme-dark .bell .notification-bell-logo{filter:invert(1) brightness(1.8)}</style>`);
+/* Bildirim kutusu, zil düğmesi veya kutu dışındaki ilk dokunuşta kapanır. */
+document.addEventListener('click',function(event){let target=event.target;if(S.showNotices&&!target.closest('.notice')&&!target.closest('.bell')){S.showNotices=false;render()}});
 document.head.insertAdjacentHTML('beforeend',`<style>.notification-settings{padding:20px;max-width:680px}.notification-settings h3{margin:0}.notify-setting{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 0;border-bottom:1px solid var(--line)}.notify-setting b,.notify-setting small{display:block}.notify-setting small{margin-top:4px;color:var(--muted)}.theme-dark .notification-settings{background:#1d2b38}.theme-dark .notify-setting{border-color:#304354}@media(max-width:520px){.notify-setting{align-items:flex-start;flex-direction:column}.notify-setting button{width:100%}}</style>`);
 render();restoreSession();
 </script></body></html>
