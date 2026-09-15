@@ -208,11 +208,16 @@ const modalWithStaffAccount=Modal;
 Modal=function(){return S.modal==='staff'?StaffAccountModal():modalWithStaffAccount()};
 /* Personel silme: geçmişi bozmayacak şekilde hesabı kapatır ve listeden kaldırır. */
 async function deleteStaffAccount(staffId, staffName){
-  if(!confirm(`${staffName} adlı personelin giriş hesabı kapatılsın ve listeden kaldırılsın mı? Geçmiş işlem kayıtları korunur.`)) return;
-  let {data,error}=await supabaseClient.functions.invoke('deactivate-staff-account',{body:{staffId}});
-  if(error||data?.error){toast(data?.error||error?.message||'Personel silinemedi.');return}
+  if(!confirm(`${staffName} adlı personel uygulama listesinden silinsin mi? Geçmiş işlem kayıtları korunur.`)) return;
+  // Personel listesi app_settings içinde Supabase'e senkronlanır; silme anında siteden kaybolur.
   S.staff=S.staff.filter(x=>String(x.id)!==String(staffId));
-  toast(`${staffName} listeden kaldırıldı; giriş hesabı kapatıldı.`);save();
+  save();
+  toast(`${staffName} personel listesinden silindi.`);
+  // Giriş hesabını da kapatma işlemi, Edge Function kurulduğunda ayrıca devreye girer.
+  try{
+    const {data,error}=await supabaseClient.functions.invoke('deactivate-staff-account',{body:{staffId}});
+    if(!error&&!data?.error) toast(`${staffName} silindi ve giriş hesabı da kapatıldı.`);
+  }catch(_){ /* Edge Function daha kurulmadıysa liste silme işlemi etkilenmez. */ }
 }
 Staff=function(){if(!isAdmin())return restricted();return AppShell(`<div class=page-head><div><h1>Personel</h1><p>${S.staff.length} personel</p></div><button class=primary onclick="show('staff')">＋ Personel Ekle</button></div><div class=page-table><table class=table><thead><tr><th>PERSONEL</th><th>İLETİŞİM</th><th>ROL</th><th>SON GİRİŞ</th><th>DURUM</th><th>İŞLEM</th></tr></thead><tbody>${S.staff.map((x,i)=>`<tr><td><span class=round-avatar style="background:#087e75;color:white">${x.name[0]}</span><b>${x.name}</b><br><small class=sub>@${x.username}</small></td><td>${x.phone||'—'}</td><td><span class=tag>${x.role}</span></td><td>—</td><td><span class="state ${x.status==='Aktif'?'green':'red'}">${x.status}</span></td><td>${String(x.id)===String(remoteProfile?.id)?'—':`<button class=danger onclick="deleteStaffAccount(${JSON.stringify(String(x.id))},${JSON.stringify(x.name)})">Sil</button>`}</td></tr>`).join('')}</tbody></table></div>`) };
 render();restoreSession();
