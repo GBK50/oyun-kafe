@@ -365,5 +365,9 @@ document.head.insertAdjacentHTML('beforeend',`<style>.calendar-nav{display:flex;
 document.head.insertAdjacentHTML('beforeend',`<style>
 .theme-dark{color-scheme:dark}.theme-dark .form select,.theme-dark .form input[type="date"],.theme-dark .form input[type="time"],.theme-dark .modal select{background:#182735!important;color:#eaf2f6!important;border-color:#405464!important}.theme-dark .form select option,.theme-dark .modal select option{background:#182735;color:#eaf2f6}.theme-dark .form select:focus,.theme-dark .modal select:focus{border-color:#18a99e!important;outline:2px solid #18a99e33}.theme-dark input::-webkit-calendar-picker-indicator{filter:invert(1) brightness(1.7)}
 </style>`);
+/* Açık pencere bir veri değil, geçici arayüz durumudur; yenilemede asla geri açılmaz. */
+if(S.modal){S.modal=null;localStorage.setItem('oyunKafe',JSON.stringify({...S,modal:null,toast:null}));}
+const saveBeforeTransientModalCleanup=save;
+save=function(){saveBeforeTransientModalCleanup();localStorage.setItem('oyunKafe',JSON.stringify({...S,modal:null,toast:null}));};
 render();restoreSession();
 </script></body></html>
