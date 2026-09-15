@@ -477,5 +477,24 @@ const playNotificationSoundBeforeAlarmV2=playNotificationSound;
 playNotificationSound=function(){if(Date.now()-lastAlarmSoundAt<600)return;lastAlarmSoundAt=Date.now();return playNotificationSoundBeforeAlarmV2()};
 setInterval(()=>{document.querySelectorAll('.alarm-v2-countdown').forEach(node=>node.textContent=alarmCountdown(node.dataset.alarmAt))},1000);
 document.head.insertAdjacentHTML('beforeend',`<style>.alarm-v2-status{margin-left:auto;display:flex;align-items:center;gap:7px}.alarm-v2{position:relative;display:inline-flex}.alarm-v2>button{width:30px;height:30px;padding:7px;border-radius:50%;background:#edf7f6;border:1px solid #b9e7e1}.alarm-v2>button img{display:block;width:14px;height:14px;object-fit:contain}.alarm-v2.armed>button{background:#fff0c8;border-color:#f3c85a}.alarm-v2>span{pointer-events:none;position:absolute;right:calc(100% + 8px);top:50%;transform:translate(7px,-50%);opacity:0;z-index:5;white-space:nowrap;padding:7px 9px;border-radius:8px;background:#173f42;color:#efffff;box-shadow:0 7px 18px #10263855;transition:.16s ease}.alarm-v2>span b,.alarm-v2>span small{display:block}.alarm-v2>span small{margin-top:2px;color:#bff3ed}.alarm-v2>span:after{content:'';position:absolute;right:-4px;top:50%;width:8px;height:8px;background:#173f42;transform:translateY(-50%) rotate(45deg)}.alarm-v2.armed:hover>span,.alarm-v2.armed:focus-within>span,.alarm-v2.armed.show>span{opacity:1;transform:translate(0,-50%)}.alarm-v2-overlay{position:fixed;inset:0;z-index:80;display:grid;place-items:center;padding:18px;background:#10263888}.alarm-v2-popup{width:min(510px,100%);background:#fff;border-radius:18px;padding:25px;box-shadow:0 22px 60px #10263866}.alarm-v2-popup .alarm-v2-icon{width:42px;height:42px;float:right;object-fit:contain}.alarm-v2-popup>span{font-size:11px;font-weight:850;letter-spacing:.08em;color:#a86b00}.alarm-v2-popup h2{margin:7px 0;color:#18344d}.alarm-v2-popup p{color:#60778a;line-height:1.5}.alarm-v2-popup>div{display:flex;justify-content:flex-end;gap:9px;margin-top:22px}.theme-dark .alarm-v2>button{background:#263948;border-color:#405464}.theme-dark .alarm-v2.armed>button{background:#51421b;border-color:#80672a}.theme-dark .alarm-v2-popup{background:#1d2b38}.theme-dark .alarm-v2-popup h2{color:#eaf2f6}.theme-dark .alarm-v2-popup p{color:#b9c6cf}@media(max-width:520px){.alarm-v2-popup{padding:20px}.alarm-v2-popup h2{font-size:20px}.alarm-v2-popup>div button{flex:1}}</style>`);
+/* Alarm sistemi geçici olarak kapatıldı. Eski loglar korunur, ancak zil, sayaç ve uyarı çalışmaz. */
+S.alarmAlert=null;
+S.alarmInfoChild=null;
+S.alarmCache={};
+S.alarmDismissals={};
+S.modal=S.modal==='alarm'||S.modal==='alarmSetup'?null:S.modal;
+restoreAlarmsFromLogs=function(){for(let c of S.children||[])delete c.alarmAt;S.alarmAlert=null;S.alarmCache={};S.alarmDismissals={}};
+openAlarmFor=function(){};
+const sessionWithoutAlarmSystem=Session;
+Session=function(c){let clean={...c};delete clean.alarmAt;return sessionBeforeAlarmV2(clean)};
+localStorage.setItem('oyunKafe',JSON.stringify({...S,toast:null}));
+/* Alarm özelliği geçici olarak tamamen kapatıldı. Yeni sürüm tasarlanana kadar
+   zil, geri sayım, ses, pop-up ve alarm hareketleri uygulamada yer almaz. */
+const alarmEventNames=new Set(['Alarm Kuruldu','Alarm Ertelendi','Alarm Çaldı','Alarm Tamamlandı']);
+S.alarmAlert=null;S.alarmInfoChild=null;S.alarmCache={};S.alarmDismissals={};
+for(let c of S.children||[]){delete c.alarmAt;c.logs=(c.logs||[]).filter(l=>!alarmEventNames.has(l[0]))}
+restoreAlarmsFromLogs=function(){S.alarmAlert=null;for(let c of S.children||[]){delete c.alarmAt;c.logs=(c.logs||[]).filter(l=>!alarmEventNames.has(l[0]))}};
+openAlarmFor=function(){};
+Session=sessionBeforeAlarmModuleRemoval;
 render();restoreSession();
 </script></body></html>
