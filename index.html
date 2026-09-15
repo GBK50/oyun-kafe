@@ -266,5 +266,31 @@ sbUpsert=async function(table,row){
   }
   return sbUpsertBeforeCreatorLock(table,row);
 };
+/* Personel oturumu: finansal kayıtlar ve yönetici ayarları tarayıcıya hiç indirilmez. */
+async function loadStaffOperationalData(){
+  let [childrenR,visitsR,breaksR,logsR,reservationsR,profilesR]=await Promise.all([
+    supabaseClient.from('children').select('*').order('created_at',{ascending:false}),
+    supabaseClient.from('visits').select('*').order('entered_at',{ascending:false}),
+    supabaseClient.from('breaks').select('*'),
+    supabaseClient.from('activity_logs').select('*').order('created_at',{ascending:false}),
+    supabaseClient.from('reservations').select('id,client_ref,reservation_type,child_name,guardian_name,guardian_phone,reserved_date,start_time,end_time,child_count,table_no,note,status').order('reserved_date',{ascending:false}),
+    supabaseClient.from('profiles').select('id,full_name'),
+  ]);
+  let problem=[childrenR,visitsR,breaksR,logsR,reservationsR,profilesR].map(x=>x.error).find(Boolean);if(problem)throw problem;
+  let visitsByChild=new Map();for(let v of visitsR.data||[]){if(!visitsByChild.has(v.child_id))visitsByChild.set(v.child_id,v)}
+  let breaksByVisit=new Map();for(let b of breaksR.data||[]){let rows=breaksByVisit.get(b.visit_id)||[];rows.push({start:b.started_at,end:b.ended_at,remoteRef:b.client_ref,remoteId:b.id});breaksByVisit.set(b.visit_id,rows)}
+  let logsByChild=new Map();for(let l of logsR.data||[]){let rows=logsByChild.get(l.child_id)||[];rows.push([l.event_type,l.created_at,l.description||'',l.client_ref]);logsByChild.set(l.child_id,rows)}
+  let names=new Map((profilesR.data||[]).map(p=>[p.id,p.full_name]));
+  S.children=(childrenR.data||[]).map(x=>{let v=visitsByChild.get(x.id);return{id:x.id,remoteId:x.id,remoteRef:x.client_ref,name:x.first_name,surname:x.last_name||'',guardian:x.guardian_first_name,gsurname:x.guardian_last_name||'',phone:x.guardian_phone||'',note:x.note||'',sid:v?.session_id||'F-'+x.id.slice(0,6),table:v?.table_no||'',location:v?.location||'İç Alan',entered:v?.entered_at||x.created_at,exited:v?.exited_at||null,status:v?.status||'ÇIKTI',creator:names.get(x.created_by)||'Sistem',creatorId:x.created_by,visitId:v?.id,visitRef:v?.client_ref,breaks:breaksByVisit.get(v?.id)||[],logs:logsByChild.get(x.id)||[],member:false}});
+  S.payments=[];S.memberships=[];
+  S.reservations=(reservationsR.data||[]).map(r=>({remoteId:r.id,remoteRef:r.client_ref,id:r.id,type:r.reservation_type,child:r.child_name,guardian:r.guardian_name,phone:r.guardian_phone||'',date:r.reserved_date,start:r.start_time?.slice(0,5)||'',end:r.end_time?.slice(0,5)||'',count:r.child_count,table:r.table_no||'',amount:0,status:r.status,note:r.note||''}));
+  remoteReady=true;localStorage.setItem('oyunKafe',JSON.stringify(S));render();startRealtimeSync();
+}
+async function syncStaffOperationalData(){
+  if(!remoteReady||!remoteUser()||S.syncing)return;S.syncing=true;S.syncStatus='Kaydediliyor…';try{let user=remoteUser();for(let c of S.children){let childRow=await sbUpsert('children',{client_ref:ensureRef(c),first_name:c.name,last_name:c.surname||null,guardian_first_name:c.guardian,guardian_last_name:c.gsurname||null,guardian_phone:c.phone||null,note:c.note||null,created_by:c.creatorId||user});c.remoteId=childRow.id;c.creatorId=childRow.created_by;let visitRow=await sbUpsert('visits',{client_ref:ensureRef(c,'visitRef'),child_id:childRow.id,session_id:c.sid,table_no:c.table||null,location:c.location||null,status:c.status,entered_at:c.entered,exited_at:c.exited||null,created_by:c.visitCreatorId||c.creatorId||user});c.visitId=visitRow.id;c.visitCreatorId=visitRow.created_by;for(let b of c.breaks||[]){let saved=await sbUpsert('breaks',{client_ref:ensureRef(b),visit_id:visitRow.id,started_at:b.start,ended_at:b.end||null});b.remoteId=saved.id}for(let l of c.logs||[]){if(!l[3])l[3]=clientRef();await sbUpsert('activity_logs',{client_ref:l[3],child_id:childRow.id,visit_id:visitRow.id,event_type:l[0],description:l[2]||null,created_at:l[1],created_by:user})}}S.pendingSync=false;S.syncStatus='Supabase ile kaydedildi';localStorage.setItem('oyunKafe',JSON.stringify(S))}catch(e){S.syncStatus='Senkronizasyon bekliyor';throw e}finally{S.syncing=false;render()}}
+const loadOperationalDataBeforeRoleSecurity=loadOperationalData;
+loadOperationalData=async function(){return isAdmin()?loadOperationalDataBeforeRoleSecurity():loadStaffOperationalData()};
+const syncToSupabaseBeforeRoleSecurity=syncToSupabase;
+syncToSupabase=async function(){return isAdmin()?syncToSupabaseBeforeRoleSecurity():syncStaffOperationalData()};
 render();restoreSession();
 </script></body></html>
