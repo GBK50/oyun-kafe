@@ -178,5 +178,7 @@ const submitWithExistingChild=submit;
 submit=function(type){if(type==='newChild'&&S.existingChildId){let c=S.children.find(x=>String(x.id)===String(S.existingChildId));if(!c){S.existingChildId=null;return submitWithExistingChild(type)}if(active(c)){toast(name(c)+' zaten oyun alanında. Mevcut kaydı açıldı.');S.selected=c.id;S.page='profile';S.modal=null;S.existingChildId=null;save();return}c.name=val('fName')||c.name;c.surname=val('fSurname');c.guardian=val('fGuardian')||c.guardian;c.gsurname=val('fGSurname');c.phone=val('fPhone');c.table=val('fTable');c.note=val('fNote');c.entered=iso();c.exited=null;c.status='OYUNDA';c.breaks=[];c.creator=currentStaff().name;log(c,'Oyuna Girdi','Mevcut çocuk kaydıyla yeni oyun seansı başlatıldı.');S.modal=null;S.existingChildId=null;toast(name(c)+' için yeni oyun seansı başlatıldı.');save();return}return submitWithExistingChild(type)};
 const modalWithExistingChild=Modal;
 Modal=function(){return S.modal==='newChild'?NewChildModal():modalWithExistingChild()};
+/* Phone fields accept digits only. */
+document.addEventListener('input',e=>{if(['fPhone','rPhone','sPhone'].includes(e.target.id)){e.target.value=e.target.value.replace(/\D/g,'')}});
 render();restoreSession();
 </script></body></html>
