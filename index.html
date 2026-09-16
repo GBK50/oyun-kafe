@@ -541,6 +541,14 @@ loadOperationalData=async function(){
      çocuk, seans, mola ve işlem logu tablolarını kullanır. */
   let operationSyncTimer=null,operationRefreshTimer=null;
   function operationSave(){
+    /* Oturum/profil hazırlanırken yapılan yerel kaydı veri değişikliği sanma.
+       Önce merkezden veri okunmalı; ancak bundan sonra yapılan kullanıcı
+       işlemleri senkron kuyruğuna alınır. */
+    if(!remoteReady||!remoteUser()){
+      localStorage.setItem('oyunKafe',JSON.stringify({...S,modal:null,toast:null}));
+      render();
+      return;
+    }
     S.pendingSync=true;
     S.operationProtectUntil=Date.now()+5000;
     localStorage.setItem('oyunKafe',JSON.stringify({...S,modal:null,toast:null}));
@@ -708,6 +716,30 @@ loadOperationalData=async function(){
   const appShellBeforeManualSyncControls=AppShell;
   AppShell=function(content){let html=appShellBeforeManualSyncControls(content),controls=`<span class="manual-sync-controls"><button title="Merkezdeki listeyi indir" onclick="refreshFromCentral()">↻ Yenile</button>${isAdmin()?'<button class="publish" title="Bu cihazdaki listeyi merkeze yaz" onclick="publishThisDeviceToCentral()">⇧ Merkeze Yaz</button>':''}</span>`;return html.replace('<div class=user>',controls+'<div class=user>')};
   document.head.insertAdjacentHTML('beforeend',`<style>.manual-sync-controls{display:flex;gap:5px;align-items:center}.manual-sync-controls button{padding:6px 8px;border:1px solid var(--line);border-radius:7px;background:#f5f8fb;color:#38536e;font-size:10px;font-weight:800;white-space:nowrap}.manual-sync-controls button.publish{background:#e7f7f4;border-color:#8ed4d2;color:#087e75}.theme-dark .manual-sync-controls button{background:#263948;color:#dcebf2;border-color:#405464}.theme-dark .manual-sync-controls button.publish{background:#174541;color:#c9f7ed}@media(max-width:820px){.manual-sync-controls{display:flex}.manual-sync-controls .publish{display:none}.manual-sync-controls button{font-size:0;width:32px;height:32px;padding:0}.manual-sync-controls button:first-child:before{content:'↻';font-size:18px}}</style>`);
+  /* Hiçbir cihaz merkez değildir. Uygulama açılışında Supabase ana kaynaktır.
+     Yalnızca merkezde hiç bulunmayan yerel yeni kayıtlar otomatik eklenir. */
+  function sameChild(local,remote){return (local.remoteRef&&local.remoteRef===remote.remoteRef)||(local.sid&&local.sid===remote.sid)||(`${local.name}|${local.surname||''}|${local.guardian}|${local.gsurname||''}`===`${remote.name}|${remote.surname||''}|${remote.guardian}|${remote.gsurname||''}`)}
+  const restoreSessionBeforeAutomaticCentralReconcile=restoreSession;
+  restoreSession=async function(){
+    let localDraft={children:[...(S.children||[])],memberships:[...(S.memberships||[])],reservations:[...(S.reservations||[])]};
+    /* Eski bir cihazdaki bekleyen bayrak merkezi veriyi sonsuza kadar engellemesin. */
+    S.pendingSync=false;S.operationProtectUntil=0;S.syncError='';
+    localStorage.setItem('oyunKafe',JSON.stringify({...S,modal:null,toast:null}));
+    await restoreSessionBeforeAutomaticCentralReconcile();
+    if(!remoteReady||!remoteUser()||!S.children)return;
+    let additions=localDraft.children.filter(local=>!S.children.some(remote=>sameChild(local,remote)));
+    let changed=false;
+    if(additions.length){S.children.push(...additions);changed=true}
+    for(let membership of localDraft.memberships){if(!(S.memberships||[]).some(remote=>remote.child===membership.child&&remote.pack===membership.pack)){S.memberships.push(membership);changed=true}}
+    for(let reservation of localDraft.reservations){if(!(S.reservations||[]).some(remote=>(reservation.remoteRef&&remote.remoteRef===reservation.remoteRef)||(remote.child===reservation.child&&remote.date===reservation.date&&remote.start===reservation.start))){S.reservations.push(reservation);changed=true}}
+    if(changed){
+      S.pendingSync=true;S.operationProtectUntil=Date.now()+30000;render();
+      try{await syncToSupabase();toast('Merkezde bulunmayan kayıtlar otomatik eşitlendi.')}catch(_){/* Bekleyen kuyruk çevrimiçi olunca otomatik yeniden dener. */}
+    }
+  };
+  /* Manuel merkez seçimi yok: tüm cihazlar aynı merkezi kaynağı otomatik kullanır. */
+  const appShellBeforeRemovingManualSyncControls=AppShell;
+  AppShell=function(content){return appShellBeforeRemovingManualSyncControls(content).replace(/<span class="manual-sync-controls">[\s\S]*?<\/span>/,'')};
   localStorage.setItem('oyunKafe',JSON.stringify({...S,modal:null,toast:null}));
   render();restoreSession();
 </script></body></html>
