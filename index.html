@@ -686,6 +686,28 @@ loadOperationalData=async function(){
       .replace('▣ Mola Başlat','<img class="break-action-icon" src="mola-baslat.png" alt="" aria-hidden="true">Mola Başlat');
   };
   document.head.insertAdjacentHTML('beforeend',`<style>.actions button:has(.break-action-icon){display:inline-flex;align-items:center;justify-content:center;gap:9px;min-height:48px}.break-action-icon{width:29px;height:29px;object-fit:contain;flex:0 0 29px}.break-action-icon[src="mola-bitir.png"]{transform:scale(1.55)}@media(max-width:700px){.actions button:has(.break-action-icon){gap:7px;min-height:46px}.break-action-icon{width:26px;height:26px;flex-basis:26px}.break-action-icon[src="mola-bitir.png"]{transform:scale(1.45)}}</style>`);
+  /* Eşitleme yönü nettir: yönetici doğru cihazdaki mevcut listeyi merkeze
+     gönderir; diğer cihazlar yalnızca merkezi listeyi yeniden indirir. */
+  const loadReliableOperationsBeforeManualRefresh=loadReliableOperations;
+  loadReliableOperations=async function(force=false){
+    if(force){let wasPending=S.pendingSync;S.pendingSync=false;try{return await loadReliableOperationsBeforeManualRefresh()}finally{if(wasPending&&S.syncStatus==='Senkronizasyon bekliyor')S.pendingSync=false}}
+    return loadReliableOperationsBeforeManualRefresh();
+  };
+  async function refreshFromCentral(){
+    if(!remoteUser()){toast('Önce oturum açmalısın.');return}
+    S.pendingSync=false;S.syncError='';S.operationProtectUntil=0;localStorage.setItem('oyunKafe',JSON.stringify({...S,modal:null,toast:null}));
+    try{await loadReliableOperations(true);toast('Merkezdeki güncel liste yüklendi.')}catch(error){S.syncStatus='Merkezden veri okunamadı';S.syncError=String(error?.message||error);render();toast(`Merkezden veri okunamadı: ${S.syncError}`)}
+  }
+  async function publishThisDeviceToCentral(){
+    if(!isAdmin()){toast('Bu işlem yalnızca yönetici hesabında yapılabilir.');return}
+    if(!remoteUser()){toast('Önce oturum açmalısın.');return}
+    if(!confirm('Bu bilgisayardaki mevcut liste merkezi kayıt olarak gönderilsin mi?'))return;
+    remoteReady=true;S.pendingSync=true;S.syncError='';S.operationProtectUntil=Date.now()+30000;render();
+    try{await syncToSupabase();await refreshFromCentral();toast('Bu bilgisayardaki liste merkezi kayda yazıldı.')}catch(error){S.syncStatus='Merkeze yazılamadı';S.syncError=String(error?.message||error);render();toast(`Merkeze yazılamadı: ${S.syncError}`)}
+  }
+  const appShellBeforeManualSyncControls=AppShell;
+  AppShell=function(content){let html=appShellBeforeManualSyncControls(content),controls=`<span class="manual-sync-controls"><button title="Merkezdeki listeyi indir" onclick="refreshFromCentral()">↻ Yenile</button>${isAdmin()?'<button class="publish" title="Bu cihazdaki listeyi merkeze yaz" onclick="publishThisDeviceToCentral()">⇧ Merkeze Yaz</button>':''}</span>`;return html.replace('<div class=user>',controls+'<div class=user>')};
+  document.head.insertAdjacentHTML('beforeend',`<style>.manual-sync-controls{display:flex;gap:5px;align-items:center}.manual-sync-controls button{padding:6px 8px;border:1px solid var(--line);border-radius:7px;background:#f5f8fb;color:#38536e;font-size:10px;font-weight:800;white-space:nowrap}.manual-sync-controls button.publish{background:#e7f7f4;border-color:#8ed4d2;color:#087e75}.theme-dark .manual-sync-controls button{background:#263948;color:#dcebf2;border-color:#405464}.theme-dark .manual-sync-controls button.publish{background:#174541;color:#c9f7ed}@media(max-width:820px){.manual-sync-controls{display:flex}.manual-sync-controls .publish{display:none}.manual-sync-controls button{font-size:0;width:32px;height:32px;padding:0}.manual-sync-controls button:first-child:before{content:'↻';font-size:18px}}</style>`);
   localStorage.setItem('oyunKafe',JSON.stringify({...S,modal:null,toast:null}));
   render();restoreSession();
 </script></body></html>
