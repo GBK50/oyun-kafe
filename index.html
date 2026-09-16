@@ -847,3 +847,61 @@ loadOperationalData=async function(){
   localStorage.setItem('oyunKafe',JSON.stringify({...S,modal:null,toast:null}));
   render();restoreSession();
 </script></body></html>
+
+
+<script>
+/* Central sync v3: the database is authoritative; never re-upload a device cache. */
+(function(){
+  async function v3Reload(){
+    S.pendingSync=false; S.syncError=''; S.operationProtectUntil=0;
+    await loadReliableOperations(true);
+    localStorage.setItem('oyunKafe',JSON.stringify({...S,modal:null,toast:null}));
+  }
+  async function v3Ready(){
+    if(!remoteUser()) throw new Error('Oturum açılmadı. Merkezi işlem yapılamaz.');
+    if(!remoteReady) await v3Reload();
+    if(!remoteReady) throw new Error('Merkezi kayıt hazır değil.');
+  }
+  function v3Fail(label,error){
+    S.pendingSync=false; S.syncStatus='Merkezi kayıt başarısız';
+    S.syncError=String(error?.message||error||'Bilinmeyen hata');
+    localStorage.setItem('oyunKafe',JSON.stringify({...S,modal:null,toast:null})); render();
+    toast(label+' kaydedilemedi: '+S.syncError);
+  }
+  syncToSupabase=async function(){
+    if(!remoteReady||!remoteUser()||S.operationSyncing) return;
+    return v3Reload();
+  };
+  operationSave=function(){
+    S.pendingSync=false;
+    localStorage.setItem('oyunKafe',JSON.stringify({...S,modal:null,toast:null})); render();
+  };
+  save=operationSave;
+  async function v3Break(action,id){
+    try{
+      await v3Ready();
+      let c=(S.children||[]).find(x=>String(x.id)===String(id));
+      if(!c?.visitRef) throw new Error('Merkezi seans bulunamadı.');
+      let at=iso(), breakRef=null;
+      if(action==='start') breakRef=clientRef();
+      else breakRef=(c.breaks||[]).find(b=>!b.end)?.remoteRef||null;
+      let {error}=await supabaseClient.rpc('apply_break_operation',{p_action:action,p_visit_ref:c.visitRef,p_break_ref:breakRef,p_occurred_at:at});
+      if(error) throw error;
+      S.modal=null; S.breakManual=false; S.manualBreakTime='';
+      await v3Reload();
+      toast(action==='start'?'Mola tüm cihazlarda kaydedildi.':'Mola bitişi tüm cihazlarda kaydedildi.');
+    }catch(error){v3Fail(action==='start'?'Mola':'Mola bitişi',error)}
+  }
+  const submitBeforeV3=submit;
+  submit=async function(type){
+    if(type==='break') return v3Break('start',S.selected);
+    return submitBeforeV3(type);
+  };
+  const actBeforeV3=act;
+  act=async function(action,id){
+    if(action==='Molayı Bitir') return v3Break('end',id);
+    return actBeforeV3(action,id);
+  };
+  window.__centralSyncV3='2026-09-16';
+})();
+</script>
