@@ -32,7 +32,7 @@
         <section class="kpis"><div class="kpi"><span>OYUN ALANINDA</span><b id="all">0</b></div><div class="kpi"><span>OYUNDA</span><b id="play">0</b></div><div class="kpi"><span>MOLADA</span><b id="br">0</b></div><div class="kpi"><span>BUGÜN GİRİŞ</span><b id="today">0</b></div><div class="kpi"><span>BUGÜNKÜ CİRO</span><b id="revenue">₺0</b></div></section>
         <div class="section-head"><h2>Oyun Alanında <small id="count" class="muted"></small></h2><div class="filters"><button class="filter selected" data-filter="all">Tümü</button><button class="filter" data-filter="OYUNDA">Oyunda</button><button class="filter" data-filter="MOLADA">Molada</button><button class="filter" data-filter="member">Üyelikli</button></div></div>
         <section id="cards" class="cards"></section>
-        <section id="settingsPanel" class="hidden"><h2>Ayarlar</h2><p class="muted">Ücretleri ve tüm çocukların hareket geçmişini merkezi olarak yönetin.</p><div class="box settings-box"><div class="modal-kicker">ÜCRETLENDİRME</div><label>İlk 1 saat ücreti (₺)</label><input id="firstHourPrice" type="number" min="0"><label>Sonraki her 30 dakika (₺)</label><input id="halfHourPrice" type="number" min="0"><button class="primary" onclick="savePricing()">Fiyatları Kaydet</button></div><div class="box settings-box"><div class="modal-kicker">TÜM HAREKETLER</div><div id="globalHistory" class="history"></div></div></section>
+        <section id="settingsPanel" class="hidden"><h2>Ayarlar</h2><p class="muted">Ücretleri, kapanan masaları ve tüm çocukların hareket geçmişini merkezi olarak yönetin.</p><div class="box settings-box"><div class="modal-kicker">ÜCRETLENDİRME</div><label>İlk 1 saat ücreti (₺)</label><input id="firstHourPrice" type="number" min="0"><label>Sonraki her 30 dakika (₺)</label><input id="halfHourPrice" type="number" min="0"><button class="primary" onclick="savePricing()">Fiyatları Kaydet</button></div><div class="box settings-box"><div class="modal-kicker">KAPANAN MASALAR</div><p class="muted">Tahsil edilen ve ücretsiz kapatılan tüm seanslar merkezi olarak burada tutulur.</p><div id="closedTables" class="history"></div></div><div class="box settings-box"><div class="modal-kicker">TÜM HAREKETLER</div><div id="globalHistory" class="history"></div></div></section>
       </section>
     </main>
   </div>
@@ -50,7 +50,7 @@
   <div id="toast" class="toast hidden"></div>
   <script>
     const sb=supabase.createClient('https://wdknvlhtkimlkrmxuegd.supabase.co','sb_publishable_AEdSGBGd1i_qRFP_3ofpJQ_V9kw5dcN');
-    let uid,allVisits=[],allBreaks=[],allActivity=[],allAlarms=[],membershipIds=new Set(),pricing={first_hour:500,each_next_half_hour:150},selectedFilter='all',editVisitId,editMode='info',quickVisitId,tableVisitId,breakVisitId,breakOffset=0,entryOffset=0,quickEntryOffset=0,alarmVisitId,cancelVisitId,exitVisitId;
+    let uid,allVisits=[],allBreaks=[],allActivity=[],allAlarms=[],closedPayments=[],membershipIds=new Set(),pricing={first_hour:500,each_next_half_hour:150},selectedFilter='all',editVisitId,editMode='info',quickVisitId,tableVisitId,breakVisitId,breakOffset=0,entryOffset=0,quickEntryOffset=0,alarmVisitId,cancelVisitId,exitVisitId;
     const now=()=>new Date().toISOString(), id=()=>crypto.randomUUID();
     function mins(from,to=new Date()){return Math.max(0,Math.floor((new Date(to)-new Date(from))/60000))}
     function textDuration(m){return `${Math.floor(m/60)} sa ${m%60} dk`}
@@ -61,16 +61,18 @@
     function feeStep(active){if(active<60){return {remaining:60-active,percent:Math.round(active/60*100),next:feeFor(61)}}const used=(active-60)%30;return {remaining:30-used,percent:Math.round(used/30*100),next:feeFor(active+1)}}
     function notify(message){toast.textContent=message;toast.classList.remove('hidden');setTimeout(()=>toast.classList.add('hidden'),3500)}
     function escapeHtml(value){const d=document.createElement('div');d.textContent=value||'';return d.innerHTML}
+    function isToday(value){return value&&new Date(value).toDateString()===new Date().toDateString()}
     async function logActivity(visit,eventType,description,metadata={}){if(!visit)return;await sb.from('activity_logs').insert({visit_id:visit.id,child_id:visit.child_id,event_type:eventType,description,metadata,created_by:uid})}
     async function load(){
       const {data:{user}}=await sb.auth.getUser();if(!user)return;uid=user.id;
       login.classList.add('hidden');app.classList.remove('hidden');usr.textContent=user.email;out.classList.remove('hidden');
-      const [visitsResult,membersResult,settingsResult,activityResult,alarmsResult]=await Promise.all([
+      const [visitsResult,membersResult,settingsResult,activityResult,alarmsResult,paymentsResult]=await Promise.all([
         sb.from('visits').select('*,children(*)').in('status',['OYUNDA','MOLADA']).order('entered_at'),
         sb.from('memberships').select('child_id,status,ends_at').eq('status','Aktif'),
         sb.from('app_settings').select('key,value').eq('key','pricing').maybeSingle(),
         sb.from('activity_logs').select('*').order('created_at',{ascending:false}).limit(100),
-        sb.from('alarms').select('*').eq('status','AKTIF').order('target_at')
+        sb.from('alarms').select('*').eq('status','AKTIF').order('target_at'),
+        sb.from('payments').select('*,children(*),visits(*)').order('created_at',{ascending:false}).limit(300)
       ]);
       if(visitsResult.error){notify(visitsResult.error.message);return}
       allVisits=visitsResult.data||[];
@@ -79,13 +81,13 @@
       if(breaksResult.error){notify(breaksResult.error.message);return}
       allBreaks=breaksResult.data||[];
       if(settingsResult.data?.value)pricing=settingsResult.data.value;
-      allActivity=activityResult.data||[];allAlarms=alarmsResult.data||[];
+      allActivity=activityResult.data||[];allAlarms=alarmsResult.data||[];closedPayments=paymentsResult.data||[];
       membershipIds=new Set((membersResult.data||[]).filter(m=>!m.ends_at||new Date(m.ends_at+'T23:59:59')>=new Date()).map(m=>m.child_id));
       const profile=await sb.from('profiles').select('full_name').eq('id',uid).maybeSingle();
       who.textContent=profile.data?.full_name||'Yönetici';
       all.textContent=allVisits.length;play.textContent=allVisits.filter(v=>v.status==='OYUNDA').length;br.textContent=allVisits.filter(v=>v.status==='MOLADA').length;
       today.textContent=allVisits.filter(v=>new Date(v.entered_at).toDateString()===new Date().toDateString()).length;
-      revenue.textContent='₺0';render();renderSettings();checkAlarms();
+      revenue.textContent=money(closedPayments.filter(p=>isToday(p.created_at||p.paid_at)).reduce((total,p)=>total+Number(p.total_amount??p.amount??0),0));render();renderSettings();checkAlarms();
     }
     function render(){
       const rows=allVisits.filter(v=>selectedFilter==='all'||(selectedFilter==='member'?membershipIds.has(v.child_id):v.status===selectedFilter));
@@ -174,7 +176,8 @@
     function showMember(){memberChild.innerHTML=allVisits.map(v=>`<option value="${v.child_id}">${escapeHtml(v.children.first_name)} ${escapeHtml(v.children.last_name)}</option>`).join('')||'<option>Önce çocuk kaydı açın</option>';memberModal.classList.remove('hidden')} function hideMember(){memberModal.classList.add('hidden')}
     async function createMember(){const childId=memberChild.value;if(!childId||!memberPackage.value.trim())return notify('Çocuk ve paket adı gerekli.');const {error}=await sb.from('memberships').insert({child_id:childId,package_name:memberPackage.value.trim(),price:Number(memberPrice.value||0),status:'Aktif',starts_at:new Date().toISOString().slice(0,10),created_by:uid});if(error)return notify(error.message);memberPackage.value='';memberPrice.value='';hideMember();notify('Üyelik merkezi sisteme eklendi.');await load()}
     function showDashboard(button){settingsPanel.classList.add('hidden');cards.parentElement.querySelector('.section-head').classList.remove('hidden');cards.classList.remove('hidden');document.querySelectorAll('.nav').forEach(n=>n.classList.toggle('active',n===button))}
-    function renderSettings(){firstHourPrice.value=pricing.first_hour||500;halfHourPrice.value=pricing.each_next_half_hour||150;globalHistory.innerHTML=historyHtml(allActivity)}
+    function closedTablesHtml(rows){if(!rows.length)return '<div class="empty muted">Henüz kapanan masa yok.</div>';return rows.map(payment=>{const child=payment.children||{},visit=payment.visits||{},name=`${child.first_name||'İsimsiz'} ${child.last_name||''}`.trim(),table=visit.table_no?`Masa ${visit.table_no}`:'Masasız',amount=Number(payment.total_amount??payment.amount??0),method=payment.payment_method||payment.method||'Ödeme',time=new Date(payment.created_at||payment.paid_at||now()).toLocaleString('tr-TR',{dateStyle:'short',timeStyle:'short'});return `<div class="history-item"><b>${escapeHtml(table)} · ${escapeHtml(name)}</b><span>${escapeHtml(method)} · ${money(amount)} · ${escapeHtml(time)}</span></div>`}).join('')}
+    function renderSettings(){firstHourPrice.value=pricing.first_hour||500;halfHourPrice.value=pricing.each_next_half_hour||150;closedTables.innerHTML=closedTablesHtml(closedPayments);globalHistory.innerHTML=historyHtml(allActivity)}
     function showSettings(button){settingsPanel.classList.remove('hidden');cards.parentElement.querySelector('.section-head').classList.add('hidden');cards.classList.add('hidden');document.querySelectorAll('.nav').forEach(n=>n.classList.toggle('active',n===button));renderSettings()}
     async function savePricing(){const value={first_hour:Number(firstHourPrice.value||0),each_next_half_hour:Number(halfHourPrice.value||0)};if(value.first_hour<0||value.each_next_half_hour<0)return notify('Geçerli ücret girin.');const {error}=await sb.from('app_settings').upsert({key:'pricing',value,updated_at:now(),updated_by:uid});if(error)return notify(error.message);pricing=value;notify('Ücretler merkezi olarak güncellendi.');await load()}
     function showAlarm(visitId){alarmVisitId=visitId;const v=allVisits.find(x=>x.id===visitId);alarmTitle.textContent=`${v?.children?.first_name||''} için alarm kur`;alarmMinutes.value='';alarmModal.classList.remove('hidden')}
