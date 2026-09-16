@@ -595,6 +595,19 @@ loadOperationalData=async function(){
         for(let b of c.breaks||[]){let saved=await sbUpsert('breaks',{client_ref:ensureRef(b),visit_id:visitRow.id,started_at:b.start,ended_at:b.end||null});b.remoteId=saved.id}
         for(let entry of c.logs||[]){if(alarmEventNames.has(entry[0]))continue;if(!entry[3])entry[3]=clientRef();await sbUpsert('activity_logs',{client_ref:entry[3],child_id:childRow.id,visit_id:visitRow.id,event_type:entry[0],description:entry[2]||null,created_at:entry[1],created_by:user})}
       }
+      /* Üyelik ve üyelik satışının sayfa yenilenince kaybolmaması için ikisi de
+         çocuk/seans verisiyle aynı işlemde kalıcı olarak yazılır. */
+      for(let membership of S.memberships||[]){
+        let c=(S.children||[]).find(item=>name(item)===membership.child);
+        if(!c?.remoteId)continue;
+        let saved=await sbUpsert('memberships',{client_ref:ensureRef(membership),child_id:c.remoteId,package_name:membership.pack,price:Number(membership.price)||0,ends_at:parseTurkishDate(membership.end),status:'Aktif',created_by:user});
+        membership.remoteId=saved.id;
+      }
+      for(let payment of S.payments||[]){
+        let c=(S.children||[]).find(item=>name(item)===payment.child);
+        let saved=await sbUpsert('payments',{client_ref:ensureRef(payment),visit_id:c?.visitId||null,child_id:c?.remoteId||null,amount:Number(payment.amount)||0,method:payment.method||'Nakit',payment_type:payment.type||'Oyun seansı',created_at:payment.date||iso(),created_by:user});
+        payment.remoteId=saved.id;
+      }
       S.pendingSync=false;S.operationProtectUntil=Date.now()+1000;S.syncStatus='Supabase ile kaydedildi';
       localStorage.setItem('oyunKafe',JSON.stringify({...S,modal:null,toast:null}));
     }finally{S.operationSyncing=false;render()}
