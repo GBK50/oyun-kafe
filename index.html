@@ -94,15 +94,28 @@
       if(visitError)return notify(visitError.message);
       child.value='';guardian.value='';table.value='';hide();notify('Çocuk kaydı merkezi sisteme eklendi.');await load();
     }
+    async function ensureVisitRef(visit){
+      if(visit?.client_ref)return visit.client_ref;
+      const proposedRef=id();
+      const {data,error}=await sb.from('visits').update({client_ref:proposedRef}).eq('id',visit.id).is('client_ref',null).select('client_ref').maybeSingle();
+      if(error)throw error;
+      if(data?.client_ref){visit.client_ref=data.client_ref;return data.client_ref}
+      const {data:fresh,error:freshError}=await sb.from('visits').select('client_ref').eq('id',visit.id).maybeSingle();
+      if(freshError)throw freshError;
+      if(fresh?.client_ref){visit.client_ref=fresh.client_ref;return fresh.client_ref}
+      throw new Error('Merkezi seans kimliği oluşturulamadı.');
+    }
     async function pause(visitId){
-      const visit=allVisits.find(v=>v.id===visitId);if(!visit?.client_ref)return notify('Merkezi seans kimliği bulunamadı. Sayfayı yenileyin.');
-      const {error}=await sb.rpc('apply_break_operation',{p_action:'start',p_visit_ref:visit.client_ref,p_break_ref:id(),p_occurred_at:now()});
+      const visit=allVisits.find(v=>v.id===visitId);if(!visit)return notify('Merkezi seans bulunamadı.');
+      let visitRef;try{visitRef=await ensureVisitRef(visit)}catch(error){return notify(error.message)}
+      const {error}=await sb.rpc('apply_break_operation',{p_action:'start',p_visit_ref:visitRef,p_break_ref:id(),p_occurred_at:now()});
       if(error)return notify(error.message);notify('Mola tüm cihazlarda kaydedildi.');await load();
     }
     async function resume(visitId){
       const visit=allVisits.find(v=>v.id===visitId);const openBreak=allBreaks.find(b=>b.visit_id===visitId&&!b.ended_at);
-      if(!visit?.client_ref)return notify('Merkezi seans kimliği bulunamadı. Sayfayı yenileyin.');
-      const {error}=await sb.rpc('apply_break_operation',{p_action:'end',p_visit_ref:visit.client_ref,p_break_ref:openBreak?.client_ref||null,p_occurred_at:now()});
+      if(!visit)return notify('Merkezi seans bulunamadı.');
+      let visitRef;try{visitRef=await ensureVisitRef(visit)}catch(error){return notify(error.message)}
+      const {error}=await sb.rpc('apply_break_operation',{p_action:'end',p_visit_ref:visitRef,p_break_ref:openBreak?.client_ref||null,p_occurred_at:now()});
       if(error)return notify(error.message);notify('Mola merkezi sistemde bitirildi.');await load();
     }
     async function finish(visitId){
