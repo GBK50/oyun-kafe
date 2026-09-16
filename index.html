@@ -667,6 +667,14 @@ loadOperationalData=async function(){
     }
     return actBeforeReliableOperations(action,id);
   };
+  /* Mola düğmeleri: yazı korunur; görsel, düğmenin solunda yer alır. */
+  const sessionBeforeBreakButtonArtwork=Session;
+  Session=function(c){
+    return sessionBeforeBreakButtonArtwork(c)
+      .replace('▷ Molayı Bitir','<img class="break-action-icon" src="mola-bitir.png" alt="" aria-hidden="true">Molayı Bitir')
+      .replace('▣ Mola Başlat','<img class="break-action-icon" src="mola-baslat.png" alt="" aria-hidden="true">Mola Başlat');
+  };
+  document.head.insertAdjacentHTML('beforeend',`<style>.actions button:has(.break-action-icon){display:inline-flex;align-items:center;justify-content:center;gap:6px}.break-action-icon{width:17px;height:17px;object-fit:contain;flex:0 0 17px}@media(max-width:700px){.break-action-icon{width:15px;height:15px;flex-basis:15px}.actions button:has(.break-action-icon){gap:4px}}</style>`);
   localStorage.setItem('oyunKafe',JSON.stringify({...S,modal:null,toast:null}));
   render();restoreSession();
 </script></body></html>
