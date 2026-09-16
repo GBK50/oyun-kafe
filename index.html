@@ -740,6 +740,24 @@ loadOperationalData=async function(){
   /* Manuel merkez seçimi yok: tüm cihazlar aynı merkezi kaynağı otomatik kullanır. */
   const appShellBeforeRemovingManualSyncControls=AppShell;
   AppShell=function(content){return appShellBeforeRemovingManualSyncControls(content).replace(/<span class="manual-sync-controls">[\s\S]*?<\/span>/,'')};
+  /* Merkezi canlı takip: son operasyon katmanı eski canlı dinleyiciyi gölgeliyordu.
+     Bundan sonra açık her cihaz, Supabase değişimini anında dinler; yayın gecikirse
+     en geç beş saniye içinde merkezi kaydı tekrar okur. Bu kontrol yalnızca
+     kuyrukta yerel bir işlem yokken çalışır; böylece başka bir cihazın eski
+     önbelleği yeni bir kayıt ya da mola hareketini asla ezemez. */
+  const loadOperationalDataBeforeCentralHeartbeat=loadOperationalData;
+  loadOperationalData=async function(){
+    await loadOperationalDataBeforeCentralHeartbeat();
+    startRealtimeSync();
+  };
+  async function centralHeartbeat(){
+    if(!remoteReady||!remoteUser()||document.hidden||S.pendingSync||S.operationSyncing)return;
+    try{await loadReliableOperations()}catch(error){
+      console.warn('Merkezi kontrol:',error?.message||error);
+    }
+  }
+  setInterval(centralHeartbeat,5000);
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)centralHeartbeat()});
   localStorage.setItem('oyunKafe',JSON.stringify({...S,modal:null,toast:null}));
   render();restoreSession();
 </script></body></html>
