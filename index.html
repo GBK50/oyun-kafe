@@ -556,6 +556,8 @@ loadOperationalData=async function(){
   save=operationSave;
   async function loadReliableOperations(){
     if(!remoteUser())return;
+    /* Henüz merkeze ulaşmamış değişikliği, eski sunucu listesiyle asla ezme. */
+    if(S.pendingSync||S.operationSyncing){clearTimeout(operationSyncTimer);operationSyncTimer=setTimeout(()=>syncToSupabase().catch(()=>{}),0);return}
     if(Date.now()<Number(S.operationProtectUntil||0))return;
     let [childrenR,visitsR,breaksR,logsR,profilesR,membershipsR,paymentsR,reservationsR,settingsR]=await Promise.all([
       supabaseClient.from('children').select('*').order('created_at',{ascending:false}),
@@ -626,9 +628,11 @@ loadOperationalData=async function(){
       let preferences={...(existingSettings.user_preferences||{})};
       preferences[user]={theme:S.theme||'light',notificationPrefs:S.notificationPrefs||{enabled:false,sound:true},notices:(S.notices||[]).filter(n=>!/alarm/i.test(String(n.text||'')))};
       let {error:settingsError}=await supabaseClient.from('app_settings').upsert({key:'operasyon_ayarlari',value:{...existingSettings,pricing:S.pricing,packages:S.settings,staff:S.staff,relationships:relationshipRows,user_preferences:preferences},updated_by:user});
-      if(settingsError)throw settingsError;
+      /* Ayarlar için izin yoksa çocuk/seans/mola senkronu başarısız sayılmaz. */
+      if(settingsError){S.settingsSyncError=String(settingsError.message||settingsError);S.pendingSettingsSync=true}else{S.settingsSyncError='';S.pendingSettingsSync=false}
       S.pendingSync=false;S.operationProtectUntil=Date.now()+1000;S.syncStatus='Supabase ile kaydedildi';
       localStorage.setItem('oyunKafe',JSON.stringify({...S,modal:null,toast:null}));
+    }catch(error){S.pendingSync=true;S.syncStatus='Senkronizasyon bekliyor';S.syncError=String(error?.message||error||'Bilinmeyen hata');localStorage.setItem('oyunKafe',JSON.stringify({...S,modal:null,toast:null}));throw error
     }finally{S.operationSyncing=false;render();if(S.operationResync){S.operationResync=false;setTimeout(()=>syncToSupabase().catch(error=>console.warn('Bekleyen senkronizasyon:',error.message)),0)}}
   };
   loadOperationalData=async function(){return loadReliableOperations()};
@@ -636,6 +640,11 @@ loadOperationalData=async function(){
     if(!remoteReady||document.hidden||Date.now()<Number(S.operationProtectUntil||0))return;
     clearTimeout(operationRefreshTimer);operationRefreshTimer=setTimeout(()=>loadReliableOperations().catch(error=>console.warn('Canlı yenileme:',error.message)),500);
   };
+  /* Bağlantı kısa süre kesilirse, açık kalan cihaz merkezi kayda yeniden dener. */
+  setInterval(()=>{if(S.pendingSync&&remoteReady&&remoteUser()&&!S.operationSyncing)syncToSupabase().catch(()=>{})},8000);
+  const appShellBeforeReliableSyncWarning=AppShell;
+  AppShell=function(content){let html=appShellBeforeReliableSyncWarning(content);if(!S.pendingSync||!S.syncError)return html;let warning=`<div class="reliable-sync-warning">Kayıtlar bu cihazda korunuyor; merkezi senkronizasyon bekliyor. <button onclick="syncToSupabase().catch(()=>{})">Tekrar Dene</button></div>`;return html.replace('<main class=main>','<main class=main>'+warning)};
+  document.head.insertAdjacentHTML('beforeend',`<style>.reliable-sync-warning{margin-bottom:12px;padding:11px 13px;border-radius:9px;background:#fff4d8;color:#875a00;font-size:12px;font-weight:750;display:flex;align-items:center;justify-content:space-between;gap:12px}.reliable-sync-warning button{padding:7px 10px;background:#fff;border:1px solid #e4bd62;color:#765000;border-radius:7px;font-weight:800}.theme-dark .reliable-sync-warning{background:#443b20;color:#ffe5a6}.theme-dark .reliable-sync-warning button{background:#263948;color:#ffe5a6;border-color:#80672a}</style>`);
   const submitBeforeReliableOperations=submit;
   submit=async function(type){
     if(type==='newChild'){
