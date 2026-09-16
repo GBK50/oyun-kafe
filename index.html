@@ -516,6 +516,24 @@ const submitBeforeDashboardVisibility=submit;
 submit=async function(type){let result=await submitBeforeDashboardVisibility(type);if(['newChild','break'].includes(type)){S.dashboardFilter='Tümü';render()}return result};
 const actBeforeDashboardVisibility=act;
 act=function(action,id){let result=actBeforeDashboardVisibility(action,id);if(action==='Molayı Bitir'){S.dashboardFilter='Tümü';render()}return result};
+/* Canlı yenileme, sunucuya henüz gönderilmemiş çocuk/mola işlemlerini ezemez. */
+const loadOperationalDataBeforePendingVisitProtection=loadOperationalData;
+loadOperationalData=async function(){
+  if(!S.pendingSync)return loadOperationalDataBeforePendingVisitProtection();
+  let draftChildren=[...(S.children||[])],draftPayments=[...(S.payments||[])],draftMemberships=[...(S.memberships||[])],draftReservations=[...(S.reservations||[])];
+  S.pendingSync=false;
+  try{await loadOperationalDataBeforePendingVisitProtection()}catch(error){S.pendingSync=true;throw error}
+  let remoteChildren=S.children||[],byRef=new Map(),bySession=new Map();
+  for(let record of remoteChildren){if(record.remoteRef)byRef.set(record.remoteRef,record);if(record.sid)bySession.set(record.sid,record)}
+  let consumed=new Set(),merged=[];
+  for(let local of draftChildren){let remote=(local.remoteRef&&byRef.get(local.remoteRef))||bySession.get(local.sid);if(remote){consumed.add(remote);merged.push({...remote,...local,remoteId:remote.remoteId||local.remoteId,remoteRef:remote.remoteRef||local.remoteRef,visitId:remote.visitId||local.visitId,visitRef:remote.visitRef||local.visitRef})}else merged.push(local)}
+  for(let remote of remoteChildren)if(!consumed.has(remote))merged.push(remote);
+  S.children=merged;
+  S.payments=[...draftPayments,...(S.payments||[]).filter(remote=>!draftPayments.some(local=>(local.remoteRef&&local.remoteRef===remote.remoteRef)||(local.remoteId&&local.remoteId===remote.remoteId)))];
+  S.memberships=[...draftMemberships,...(S.memberships||[]).filter(remote=>!draftMemberships.some(local=>(local.remoteRef&&local.remoteRef===remote.remoteRef)||(local.remoteId&&local.remoteId===remote.remoteId)))];
+  S.reservations=[...draftReservations,...(S.reservations||[]).filter(remote=>!draftReservations.some(local=>(local.remoteRef&&local.remoteRef===remote.remoteRef)||(local.remoteId&&local.remoteId===remote.remoteId)))];
+  S.pendingSync=true;localStorage.setItem('oyunKafe',JSON.stringify({...S,modal:null,toast:null}));scheduleRemoteSync();render();
+};
 localStorage.setItem('oyunKafe',JSON.stringify({...S,modal:null,toast:null}));
 render();restoreSession();
 </script></body></html>
