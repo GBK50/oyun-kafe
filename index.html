@@ -751,8 +751,19 @@ loadOperationalData=async function(){
     startRealtimeSync();
   };
   async function centralHeartbeat(){
-    if(!remoteReady||!remoteUser()||document.hidden||S.pendingSync||S.operationSyncing)return;
-    try{await loadReliableOperations()}catch(error){
+    if(!remoteReady||!remoteUser()||document.hidden||S.operationSyncing)return;
+    /* Eski sürümlerden kalmış, zamanı bilinmeyen boş kuyruklar merkezi
+       yenilemeyi sonsuza kadar engellemesin. Gerçek hata varsa kuyruk korunur
+       ve yeniden gönderilir; hatasız ancak 15 sn'den eski bayrak merkezi
+       kaydı yeniden okumak için temizlenir. */
+    if(S.pendingSync){
+      let pendingAge=Date.now()-Number(S.pendingSyncAt||0);
+      if(S.syncError){try{await syncToSupabase()}catch(_){return}return}
+      if(pendingAge<15000)return;
+      S.pendingSync=false;
+      localStorage.setItem('oyunKafe',JSON.stringify({...S,modal:null,toast:null}));
+    }
+    try{await loadReliableOperations(true)}catch(error){
       console.warn('Merkezi kontrol:',error?.message||error);
     }
   }
@@ -761,7 +772,29 @@ loadOperationalData=async function(){
   /* Operasyon düğmeleri (kayıt, mola başlatma ve mola bitirme) arka plandaki
      kuyruğu beklemez. İşlem doğrudan merkezi kayda yazılır; yazılamazsa
      kullanıcıya başarılıymış gibi görünmek yerine gerçek hata açıkça verilir. */
-  async function commitOperationToCentral(label){
+  const operationSaveBeforeCentralTimestamp=operationSave;
+  operationSave=function(){
+    if(remoteReady&&remoteUser())S.pendingSyncAt=Date.now();
+    return operationSaveBeforeCentralTimestamp();
+  };
+  const syncToSupabaseBeforeCentralAck=syncToSupabase;
+  syncToSupabase=async function(){
+    let result=await syncToSupabaseBeforeCentralAck();
+    if(!S.pendingSync)delete S.pendingSyncAt;
+    return result;
+  };
+  const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+  async function waitForCentralQueue(){
+    for(let step=0;step<80;step++){
+      if(!S.operationSyncing){
+        if(!S.pendingSync)return true;
+        await syncToSupabase();
+      }
+      await pause(100);
+    }
+    return !S.pendingSync&&!S.operationSyncing;
+  }
+  async function commitOperationToCentral(label,expected){
     if(!remoteReady||!remoteUser()){
       S.syncStatus='Merkeze bağlanılamadı';
       S.syncError='Oturum ve merkezi kayıt henüz hazır değil.';
@@ -772,7 +805,12 @@ loadOperationalData=async function(){
       return false;
     }
     try{
-      await syncToSupabase();
+      if(!await waitForCentralQueue())throw new Error('Merkezi kayıt işlemi zaman aşımına uğradı.');
+      if(expected?.visitRef){
+        let {data,error}=await supabaseClient.from('visits').select('status,client_ref').eq('client_ref',expected.visitRef).single();
+        if(error)throw error;
+        if(data?.status!==expected.status)throw new Error(`Merkezdeki seans durumu ${data?.status||'bulunamadı'} olarak kaldı.`);
+      }
       S.pendingSync=false;
       S.syncError='';
       S.syncStatus='Supabase ile kaydedildi';
@@ -792,12 +830,18 @@ loadOperationalData=async function(){
   const submitBeforeImmediateCentralCommit=submit;
   submit=async function(type){
     await submitBeforeImmediateCentralCommit(type);
-    if((type==='newChild'||type==='break')&&!S.modal)await commitOperationToCentral(type==='break'?'Mola':'Kayıt');
+    if((type==='newChild'||type==='break')&&!S.modal){
+      let c=type==='break'?child():null;
+      await commitOperationToCentral(type==='break'?'Mola':'Kayıt',c?{visitRef:c.visitRef,status:c.status}:null);
+    }
   };
   const actBeforeImmediateCentralCommit=act;
   act=async function(action,id){
     let result=await actBeforeImmediateCentralCommit(action,id);
-    if(action==='Molayı Bitir')await commitOperationToCentral('Mola bitişi');
+    if(action==='Molayı Bitir'){
+      let c=(S.children||[]).find(item=>String(item.id)===String(id));
+      await commitOperationToCentral('Mola bitişi',c?{visitRef:c.visitRef,status:c.status}:null);
+    }
     return result;
   };
   localStorage.setItem('oyunKafe',JSON.stringify({...S,modal:null,toast:null}));
