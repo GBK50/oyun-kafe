@@ -758,6 +758,48 @@ loadOperationalData=async function(){
   }
   setInterval(centralHeartbeat,5000);
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)centralHeartbeat()});
+  /* Operasyon düğmeleri (kayıt, mola başlatma ve mola bitirme) arka plandaki
+     kuyruğu beklemez. İşlem doğrudan merkezi kayda yazılır; yazılamazsa
+     kullanıcıya başarılıymış gibi görünmek yerine gerçek hata açıkça verilir. */
+  async function commitOperationToCentral(label){
+    if(!remoteReady||!remoteUser()){
+      S.syncStatus='Merkeze bağlanılamadı';
+      S.syncError='Oturum ve merkezi kayıt henüz hazır değil.';
+      S.pendingSync=true;
+      localStorage.setItem('oyunKafe',JSON.stringify({...S,modal:null,toast:null}));
+      render();
+      toast(`${label} merkezde henüz kaydedilemedi.`);
+      return false;
+    }
+    try{
+      await syncToSupabase();
+      S.pendingSync=false;
+      S.syncError='';
+      S.syncStatus='Supabase ile kaydedildi';
+      localStorage.setItem('oyunKafe',JSON.stringify({...S,modal:null,toast:null}));
+      toast(`${label} tüm cihazlar için kaydedildi.`);
+      return true;
+    }catch(error){
+      S.pendingSync=true;
+      S.syncStatus='Merkezi kayıt başarısız';
+      S.syncError=String(error?.message||error||'Bilinmeyen hata');
+      localStorage.setItem('oyunKafe',JSON.stringify({...S,modal:null,toast:null}));
+      render();
+      toast(`${label} merkeze yazılamadı: ${S.syncError}`);
+      return false;
+    }
+  }
+  const submitBeforeImmediateCentralCommit=submit;
+  submit=async function(type){
+    await submitBeforeImmediateCentralCommit(type);
+    if((type==='newChild'||type==='break')&&!S.modal)await commitOperationToCentral(type==='break'?'Mola':'Kayıt');
+  };
+  const actBeforeImmediateCentralCommit=act;
+  act=async function(action,id){
+    let result=await actBeforeImmediateCentralCommit(action,id);
+    if(action==='Molayı Bitir')await commitOperationToCentral('Mola bitişi');
+    return result;
+  };
   localStorage.setItem('oyunKafe',JSON.stringify({...S,modal:null,toast:null}));
   render();restoreSession();
 </script></body></html>
