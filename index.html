@@ -499,6 +499,11 @@ openAlarmFor=function(){};
 Session=sessionBeforeAlarmIndicator;
 const sessionWithClearTableLabel=Session;
 Session=function(c){return sessionWithClearTableLabel(c).replace(`♟ Masa ${c.table||'—'}`,`♟ Masa: ${c.table||'Atanmamış'}`)};
+/* Oturum yalnızca kullanıcı "Oturumu Kapat" düğmesine bastığında kapanır.
+   Sayfayı yenilemek veya bir süre işlem yapmamak giriş ekranına düşürmez. */
+const loginBeforePersistentSession=login;
+login=async function(){await loginBeforePersistentSession();if(!S.loggedOut){S.rememberPreference=true;localStorage.setItem('oyunKafeRememberMe','true')}};
+restoreSession=async function(){let {data}=await supabaseClient.auth.getSession();if(data.session){try{await loadRemoteProfile(data.session.user);await loadOperationalData();return}catch(e){console.warn('Oturum geri yüklenemedi:',e.message)}}S.loggedOut=true;S.page='Ana Sayfa';S.loginError='';render()};
 localStorage.setItem('oyunKafe',JSON.stringify({...S,modal:null,toast:null}));
 render();restoreSession();
 </script></body></html>
