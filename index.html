@@ -534,6 +534,107 @@ loadOperationalData=async function(){
   S.reservations=[...draftReservations,...(S.reservations||[]).filter(remote=>!draftReservations.some(local=>(local.remoteRef&&local.remoteRef===remote.remoteRef)||(local.remoteId&&local.remoteId===remote.remoteId)))];
   S.pendingSync=true;localStorage.setItem('oyunKafe',JSON.stringify({...S,modal:null,toast:null}));scheduleRemoteSync();render();
 };
-localStorage.setItem('oyunKafe',JSON.stringify({...S,modal:null,toast:null}));
-render();restoreSession();
+  /* Tek ve güvenilir operasyon akışı.
+     Önceki sürümlerde aynı kayıt/mola işlemini yöneten birden fazla senkron
+     sarmalayıcısı vardı. Canlı yenileme bu sarmalayıcılar nedeniyle yerel
+     işlemi eski sunucu listesiyle ezebiliyordu. Aşağıdaki akış yalnızca
+     çocuk, seans, mola ve işlem logu tablolarını kullanır. */
+  let operationSyncTimer=null,operationRefreshTimer=null;
+  function operationSave(){
+    S.pendingSync=true;
+    S.operationProtectUntil=Date.now()+5000;
+    localStorage.setItem('oyunKafe',JSON.stringify({...S,modal:null,toast:null}));
+    render();
+    clearTimeout(operationSyncTimer);
+    operationSyncTimer=setTimeout(()=>syncToSupabase().catch(error=>{
+      S.syncStatus='Senkronizasyon bekliyor';
+      S.syncError=String(error?.message||error||'Bilinmeyen hata');
+      localStorage.setItem('oyunKafe',JSON.stringify({...S,modal:null,toast:null}));
+      render();
+    }),0);
+  }
+  async function loadReliableOperations(){
+    if(!remoteUser())return;
+    if(Date.now()<Number(S.operationProtectUntil||0))return;
+    let [childrenR,visitsR,breaksR,logsR,profilesR,membershipsR,paymentsR,reservationsR]=await Promise.all([
+      supabaseClient.from('children').select('*').order('created_at',{ascending:false}),
+      supabaseClient.from('visits').select('*').order('entered_at',{ascending:false}),
+      supabaseClient.from('breaks').select('*'),
+      supabaseClient.from('activity_logs').select('*').order('created_at',{ascending:false}),
+      supabaseClient.from('profiles').select('id,full_name'),
+      supabaseClient.from('memberships').select('*'),
+      supabaseClient.from('payments').select('*').order('created_at',{ascending:false}),
+      supabaseClient.from('reservations').select('*').order('reserved_date',{ascending:false})
+    ]);
+    let issue=[childrenR,visitsR,breaksR,logsR,profilesR,membershipsR,paymentsR,reservationsR].map(r=>r.error).find(Boolean);
+    if(issue)throw issue;
+    let visitsByChild=new Map(),breaksByVisit=new Map(),logsByChild=new Map(),people=new Map((profilesR.data||[]).map(p=>[p.id,p.full_name]));
+    for(let visit of visitsR.data||[])if(!visitsByChild.has(visit.child_id))visitsByChild.set(visit.child_id,visit);
+    for(let row of breaksR.data||[]){let list=breaksByVisit.get(row.visit_id)||[];list.push({start:row.started_at,end:row.ended_at,remoteRef:row.client_ref,remoteId:row.id});breaksByVisit.set(row.visit_id,list)}
+    for(let row of logsR.data||[]){if(alarmEventNames.has(row.event_type))continue;let list=logsByChild.get(row.child_id)||[];list.push([row.event_type,row.created_at,row.description||'',row.client_ref,people.get(row.created_by)||'Sistem',row.created_by]);logsByChild.set(row.child_id,list)}
+    S.children=(childrenR.data||[]).map(row=>{let visit=visitsByChild.get(row.id);return {id:row.id,remoteId:row.id,remoteRef:row.client_ref,name:row.first_name,surname:row.last_name||'',guardian:row.guardian_first_name,gsurname:row.guardian_last_name||'',phone:row.guardian_phone||'',note:row.note||'',sid:visit?.session_id||'F-'+row.id.slice(0,6),table:visit?.table_no||'',location:visit?.location||'İç Alan',entered:visit?.entered_at||row.created_at,exited:visit?.exited_at||null,status:visit?.status||'ÇIKTI',creator:people.get(row.created_by)||'Sistem',creatorId:row.created_by,visitId:visit?.id,visitRef:visit?.client_ref,breaks:breaksByVisit.get(visit?.id)||[],logs:logsByChild.get(row.id)||[],member:false}});
+    let childrenById=new Map(S.children.map(c=>[c.remoteId,c]));
+    S.memberships=(membershipsR.data||[]).map(row=>{let c=childrenById.get(row.child_id);if(c)c.member=row.status==='Aktif';return {remoteId:row.id,remoteRef:row.client_ref,child:c?name(c):'Bilinmeyen Çocuk',pack:row.package_name,end:row.ends_at||'',price:Number(row.price)||0}});
+    if(isAdmin()){
+      S.payments=(paymentsR.data||[]).map(row=>{let c=childrenById.get(row.child_id);return {remoteId:row.id,remoteRef:row.client_ref,date:row.created_at,child:c?name(c):'—',guardian:c?`${c.guardian} ${c.gsurname}`:'—',type:row.payment_type,amount:Number(row.amount)||0,method:row.method,staff:people.get(row.created_by)||'Sistem'}});
+      S.reservations=(reservationsR.data||[]).map(row=>({remoteId:row.id,remoteRef:row.client_ref,id:row.id,type:row.reservation_type,child:row.child_name,guardian:row.guardian_name,phone:row.guardian_phone||'',date:row.reserved_date,start:row.start_time?.slice(0,5)||'',end:row.end_time?.slice(0,5)||'',count:row.child_count,table:row.table_no||'',amount:Number(row.amount)||0,status:row.status==='İptal'?'İptal':row.payment_status,note:row.note||''}));
+    }
+    remoteReady=true;S.pendingSync=false;
+    localStorage.setItem('oyunKafe',JSON.stringify({...S,modal:null,toast:null}));render();
+  }
+  syncToSupabase=async function(){
+    if(!remoteReady||!remoteUser()||S.operationSyncing)return;
+    S.operationSyncing=true;S.syncStatus='Kaydediliyor…';render();
+    try{
+      let user=remoteUser();
+      for(let c of S.children||[]){
+        let childRow=await sbUpsert('children',{client_ref:ensureRef(c),first_name:c.name,last_name:c.surname||null,guardian_first_name:c.guardian,guardian_last_name:c.gsurname||null,guardian_phone:c.phone||null,note:c.note||null,created_by:c.creatorId||user});
+        c.remoteId=childRow.id;c.creatorId=childRow.created_by;
+        let visitRow=await sbUpsert('visits',{client_ref:ensureRef(c,'visitRef'),child_id:childRow.id,session_id:c.sid,table_no:c.table||null,location:c.location||null,status:c.status,entered_at:c.entered,exited_at:c.exited||null,created_by:c.visitCreatorId||c.creatorId||user});
+        c.visitId=visitRow.id;c.visitCreatorId=visitRow.created_by;
+        for(let b of c.breaks||[]){let saved=await sbUpsert('breaks',{client_ref:ensureRef(b),visit_id:visitRow.id,started_at:b.start,ended_at:b.end||null});b.remoteId=saved.id}
+        for(let entry of c.logs||[]){if(alarmEventNames.has(entry[0]))continue;if(!entry[3])entry[3]=clientRef();await sbUpsert('activity_logs',{client_ref:entry[3],child_id:childRow.id,visit_id:visitRow.id,event_type:entry[0],description:entry[2]||null,created_at:entry[1],created_by:user})}
+      }
+      S.pendingSync=false;S.operationProtectUntil=Date.now()+1000;S.syncStatus='Supabase ile kaydedildi';
+      localStorage.setItem('oyunKafe',JSON.stringify({...S,modal:null,toast:null}));
+    }finally{S.operationSyncing=false;render()}
+  };
+  loadOperationalData=async function(){return loadReliableOperations()};
+  queueRealtimePull=function(){
+    if(!remoteReady||document.hidden||Date.now()<Number(S.operationProtectUntil||0))return;
+    clearTimeout(operationRefreshTimer);operationRefreshTimer=setTimeout(()=>loadReliableOperations().catch(error=>console.warn('Canlı yenileme:',error.message)),500);
+  };
+  const submitBeforeReliableOperations=submit;
+  submit=async function(type){
+    if(type==='newChild'){
+      let first=val('fName'),guardian=val('fGuardian');
+      if(!first||!guardian){toast('Çocuk Adı ve Veli Adı zorunludur.');return}
+      let existing=S.existingChildId&&S.children.find(c=>String(c.id)===String(S.existingChildId));
+      if(existing){
+        if(active(existing)){toast(`${name(existing)} zaten oyun alanında.`);return}
+        Object.assign(existing,{name:first,surname:val('fSurname'),guardian,gsurname:val('fGSurname'),phone:val('fPhone'),table:val('fTable'),note:val('fNote'),entered:iso(),exited:null,status:'OYUNDA',breaks:[],creator:currentStaff().name,creatorId:remoteUser(),visitId:null,visitRef:null});
+        log(existing,'Oyuna Girdi','Mevcut çocuk kaydıyla yeni oyun seansı başlatıldı.');
+      }else{
+        let c={id:'local-'+Date.now()+'-'+Math.random().toString(16).slice(2),remoteRef:clientRef(),name:first,surname:val('fSurname'),guardian,gsurname:val('fGSurname'),phone:val('fPhone'),table:val('fTable'),location:'İç Alan',sid:'F-'+String(Math.floor(Math.random()*999999)).padStart(6,'0'),entered:iso(),status:'OYUNDA',creator:currentStaff().name,creatorId:remoteUser(),note:val('fNote'),member:false,breaks:[],logs:[]};
+        c.visitRef=clientRef();log(c,'Oyuna Girdi','Kayıt oluşturuldu.');S.children.unshift(c);
+      }
+      S.modal=null;S.existingChildId=null;S.dashboardFilter='Tümü';toast(`${first} için kayıt açıldı.`);operationSave();return;
+    }
+    if(type==='break'){
+      let c=child();if(!c){toast('Çocuk kaydı bulunamadı.');return}
+      let started=new Date();
+      if(S.breakManual){let manual=val('manualBreakTime');if(!manual){toast('Mola başlangıç saatini girin.');return}let n=new Date(),day=`${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`;started=new Date(`${day}T${manual}:00`);if(Number.isNaN(+started)||started>n||started<new Date(c.entered)){toast('Geçerli bir mola başlangıç saati girin.');return}}
+      c.status='MOLADA';c.breaks=c.breaks||[];c.breaks.push({start:started.toISOString(),remoteRef:clientRef()});log(c,'Molaya Çıktı','Mola başlatıldı.');S.breakManual=false;S.manualBreakTime='';S.modal=null;S.dashboardFilter='Tümü';toast('Mola başlatıldı.');operationSave();return;
+    }
+    return submitBeforeReliableOperations(type);
+  };
+  const actBeforeReliableOperations=act;
+  act=function(action,id){
+    if(action==='Molayı Bitir'){
+      let c=S.children.find(x=>String(x.id)===String(id));if(!c){toast('Çocuk kaydı bulunamadı.');return}let b=(c.breaks||[]).find(x=>!x.end);if(!b){toast('Açık mola bulunamadı.');return}b.end=iso();c.status='OYUNDA';log(c,'Moladan Döndü','Mola sonlandırıldı.');S.dashboardFilter='Tümü';toast('Mola sonlandırıldı.');operationSave();return;
+    }
+    return actBeforeReliableOperations(action,id);
+  };
+  localStorage.setItem('oyunKafe',JSON.stringify({...S,modal:null,toast:null}));
+  render();restoreSession();
 </script></body></html>
