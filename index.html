@@ -559,6 +559,7 @@ loadOperationalData=async function(){
     /* Henüz merkeze ulaşmamış değişikliği, eski sunucu listesiyle asla ezme. */
     if(S.pendingSync||S.operationSyncing){clearTimeout(operationSyncTimer);operationSyncTimer=setTimeout(()=>syncToSupabase().catch(()=>{}),0);return}
     if(Date.now()<Number(S.operationProtectUntil||0))return;
+    let canManageFinance=isAdmin();
     let [childrenR,visitsR,breaksR,logsR,profilesR,membershipsR,paymentsR,reservationsR,settingsR]=await Promise.all([
       supabaseClient.from('children').select('*').order('created_at',{ascending:false}),
       supabaseClient.from('visits').select('*').order('entered_at',{ascending:false}),
@@ -566,9 +567,9 @@ loadOperationalData=async function(){
       supabaseClient.from('activity_logs').select('*').order('created_at',{ascending:false}),
       supabaseClient.from('profiles').select('id,full_name'),
       supabaseClient.from('memberships').select('*'),
-      supabaseClient.from('payments').select('*').order('created_at',{ascending:false}),
+      canManageFinance?supabaseClient.from('payments').select('*').order('created_at',{ascending:false}):Promise.resolve({data:[],error:null}),
       supabaseClient.from('reservations').select('*').order('reserved_date',{ascending:false}),
-      supabaseClient.from('app_settings').select('value').eq('key','operasyon_ayarlari').maybeSingle()
+      canManageFinance?supabaseClient.from('app_settings').select('value').eq('key','operasyon_ayarlari').maybeSingle():Promise.resolve({data:null,error:null})
     ]);
     let issue=[childrenR,visitsR,breaksR,logsR,profilesR,membershipsR,paymentsR,reservationsR,settingsR].map(r=>r.error).find(Boolean);
     if(issue)throw issue;
@@ -579,7 +580,7 @@ loadOperationalData=async function(){
     S.children=(childrenR.data||[]).map(row=>{let visit=visitsByChild.get(row.id);return {id:row.id,remoteId:row.id,remoteRef:row.client_ref,name:row.first_name,surname:row.last_name||'',guardian:row.guardian_first_name,gsurname:row.guardian_last_name||'',phone:row.guardian_phone||'',note:row.note||'',sid:visit?.session_id||'F-'+row.id.slice(0,6),table:visit?.table_no||'',location:visit?.location||'İç Alan',entered:visit?.entered_at||row.created_at,exited:visit?.exited_at||null,status:visit?.status||'ÇIKTI',creator:people.get(row.created_by)||'Sistem',creatorId:row.created_by,visitId:visit?.id,visitRef:visit?.client_ref,breaks:breaksByVisit.get(visit?.id)||[],logs:logsByChild.get(row.id)||[],member:false}});
     let childrenById=new Map(S.children.map(c=>[c.remoteId,c]));
     S.memberships=(membershipsR.data||[]).map(row=>{let c=childrenById.get(row.child_id);if(c)c.member=row.status==='Aktif';return {remoteId:row.id,remoteRef:row.client_ref,child:c?name(c):'Bilinmeyen Çocuk',pack:row.package_name,end:row.ends_at||'',price:Number(row.price)||0}});
-    if(isAdmin()){
+    if(canManageFinance){
       S.payments=(paymentsR.data||[]).map(row=>{let c=childrenById.get(row.child_id);return {remoteId:row.id,remoteRef:row.client_ref,date:row.created_at,child:c?name(c):'—',guardian:c?`${c.guardian} ${c.gsurname}`:'—',type:row.payment_type,amount:Number(row.amount)||0,method:row.method,staff:people.get(row.created_by)||'Sistem'}});
       S.reservations=(reservationsR.data||[]).map(row=>({remoteId:row.id,remoteRef:row.client_ref,id:row.id,type:row.reservation_type,child:row.child_name,guardian:row.guardian_name,phone:row.guardian_phone||'',date:row.reserved_date,start:row.start_time?.slice(0,5)||'',end:row.end_time?.slice(0,5)||'',count:row.child_count,table:row.table_no||'',amount:Number(row.amount)||0,status:row.status==='İptal'?'İptal':row.payment_status,note:row.note||''}));
     }
@@ -614,7 +615,7 @@ loadOperationalData=async function(){
         let saved=await sbUpsert('memberships',{client_ref:ensureRef(membership),child_id:c.remoteId,package_name:membership.pack,price:Number(membership.price)||0,ends_at:parseTurkishDate(membership.end),status:'Aktif',created_by:user});
         membership.remoteId=saved.id;
       }
-      for(let payment of S.payments||[]){
+      if(isAdmin())for(let payment of S.payments||[]){
         let c=(S.children||[]).find(item=>name(item)===payment.child);
         let saved=await sbUpsert('payments',{client_ref:ensureRef(payment),visit_id:c?.visitId||null,child_id:c?.remoteId||null,amount:Number(payment.amount)||0,method:payment.method||'Nakit',payment_type:payment.type||'Oyun seansı',created_at:payment.date||iso(),created_by:user});
         payment.remoteId=saved.id;
@@ -623,13 +624,14 @@ loadOperationalData=async function(){
         let saved=await sbUpsert('reservations',{client_ref:ensureRef(reservation),reservation_type:reservation.type,child_name:reservation.child,guardian_name:reservation.guardian,guardian_phone:reservation.phone||null,reserved_date:reservation.date,start_time:reservation.start,end_time:reservation.end||null,child_count:Number(reservation.count)||1,table_no:reservation.table||null,amount:Number(reservation.amount)||0,payment_status:reservation.status||'Ödenmedi',note:reservation.note||null,status:reservation.status==='İptal'?'İptal':'Aktif',created_by:user});
         reservation.remoteId=saved.id;
       }
-      let relationshipRows=(S.relationships||[]).map(r=>{let a=(S.children||[]).find(c=>String(c.id)===String(r.a)),b=(S.children||[]).find(c=>String(c.id)===String(r.b));return a?.remoteRef&&b?.remoteRef?{a_ref:a.remoteRef,b_ref:b.remoteRef,type:r.type}:null}).filter(Boolean);
-      let existingSettings=(await supabaseClient.from('app_settings').select('value').eq('key','operasyon_ayarlari').maybeSingle()).data?.value||{};
-      let preferences={...(existingSettings.user_preferences||{})};
-      preferences[user]={theme:S.theme||'light',notificationPrefs:S.notificationPrefs||{enabled:false,sound:true},notices:(S.notices||[]).filter(n=>!/alarm/i.test(String(n.text||'')))};
-      let {error:settingsError}=await supabaseClient.from('app_settings').upsert({key:'operasyon_ayarlari',value:{...existingSettings,pricing:S.pricing,packages:S.settings,staff:S.staff,relationships:relationshipRows,user_preferences:preferences},updated_by:user});
-      /* Ayarlar için izin yoksa çocuk/seans/mola senkronu başarısız sayılmaz. */
-      if(settingsError){S.settingsSyncError=String(settingsError.message||settingsError);S.pendingSettingsSync=true}else{S.settingsSyncError='';S.pendingSettingsSync=false}
+      if(isAdmin()){
+        let relationshipRows=(S.relationships||[]).map(r=>{let a=(S.children||[]).find(c=>String(c.id)===String(r.a)),b=(S.children||[]).find(c=>String(c.id)===String(r.b));return a?.remoteRef&&b?.remoteRef?{a_ref:a.remoteRef,b_ref:b.remoteRef,type:r.type}:null}).filter(Boolean);
+        let existingSettings=(await supabaseClient.from('app_settings').select('value').eq('key','operasyon_ayarlari').maybeSingle()).data?.value||{};
+        let preferences={...(existingSettings.user_preferences||{})};
+        preferences[user]={theme:S.theme||'light',notificationPrefs:S.notificationPrefs||{enabled:false,sound:true},notices:(S.notices||[]).filter(n=>!/alarm/i.test(String(n.text||'')))};
+        let {error:settingsError}=await supabaseClient.from('app_settings').upsert({key:'operasyon_ayarlari',value:{...existingSettings,pricing:S.pricing,packages:S.settings,staff:S.staff,relationships:relationshipRows,user_preferences:preferences},updated_by:user});
+        if(settingsError){S.settingsSyncError=String(settingsError.message||settingsError);S.pendingSettingsSync=true}else{S.settingsSyncError='';S.pendingSettingsSync=false}
+      }
       S.pendingSync=false;S.operationProtectUntil=Date.now()+1000;S.syncStatus='Supabase ile kaydedildi';
       localStorage.setItem('oyunKafe',JSON.stringify({...S,modal:null,toast:null}));
     }catch(error){S.pendingSync=true;S.syncStatus='Senkronizasyon bekliyor';S.syncError=String(error?.message||error||'Bilinmeyen hata');localStorage.setItem('oyunKafe',JSON.stringify({...S,modal:null,toast:null}));throw error
