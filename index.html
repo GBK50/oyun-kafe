@@ -57,8 +57,10 @@
     function breakMinutes(v){return allBreaks.filter(b=>b.visit_id===v.id).reduce((n,b)=>n+mins(b.started_at,b.ended_at||new Date()),0)}
     function activeMinutes(v){return Math.max(0,mins(v.entered_at)-breakMinutes(v))}
     function money(n){return `₺${Number(n||0).toLocaleString('tr-TR')}`}
-    function feeFor(active,isMember=false){if(isMember)return 0;return Number(pricing.first_hour||500)+(active>60?Math.ceil((active-60)/30)*Number(pricing.each_next_half_hour||150):0)}
-    function feeStep(active){if(active<60){return {remaining:60-active,percent:Math.round(active/60*100),next:feeFor(61)}}const used=(active-60)%30,remaining=30-used;return {remaining,percent:Math.round(used/30*100),next:feeFor(active+remaining+1)}}
+    // Sayaç dakikası tamamlandığında değil, ekranda 59. dakika görüldüğünde yeni basamağa geçer.
+    const FIRST_STEP_MINUTES=59,NEXT_STEP_MINUTES=30;
+    function feeFor(active,isMember=false){if(isMember)return 0;const first=Number(pricing.first_hour||500),next=Number(pricing.each_next_half_hour||150);if(active<FIRST_STEP_MINUTES)return first;return first+(Math.floor((active-FIRST_STEP_MINUTES)/NEXT_STEP_MINUTES)+1)*next}
+    function feeStep(active){if(active<FIRST_STEP_MINUTES){const remaining=FIRST_STEP_MINUTES-active;return {remaining,percent:Math.floor(active/FIRST_STEP_MINUTES*100),next:feeFor(FIRST_STEP_MINUTES)}}const used=(active-FIRST_STEP_MINUTES)%NEXT_STEP_MINUTES,remaining=NEXT_STEP_MINUTES-used;return {remaining,percent:Math.floor(used/NEXT_STEP_MINUTES*100),next:feeFor(active+remaining)}}
     function notify(message){toast.textContent=message;toast.classList.remove('hidden');setTimeout(()=>toast.classList.add('hidden'),3500)}
     function escapeHtml(value){const d=document.createElement('div');d.textContent=value||'';return d.innerHTML}
     function actorForActivity(event){return event?.metadata?.operator_name||'Bilinmeyen personel'}
