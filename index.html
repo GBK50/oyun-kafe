@@ -38,10 +38,11 @@
   <div class="shell">
     <aside class="side">
       <button class="nav active" onclick="showDashboard(this)">Ana Sayfa</button><button class="nav" onclick="showChildren(this)">Çocuklar</button><button class="nav admin-only" onclick="showMemberships(this)">Üyelikler</button><button class="nav admin-only" onclick="showPayments(this)">Ödemeler</button><button class="nav admin-only" onclick="showReports(this)">Raporlar</button><button class="nav admin-only" onclick="showStaff(this)">Personel</button><button class="nav admin-only" onclick="showSettings(this)">Ayarlar</button>
+      <a class="nav" href="redy-ai.html" style="text-decoration:none">REDY AI · Ücretsiz pilot</a>
     </aside>
     <div id="mobileMenuOverlay" class="mobile-menu-overlay" aria-hidden="true" onclick="closeMobileMenu()"></div>
     <main class="main">
-      <section id="login" class="box"><h1>Giriş</h1><p class="muted">Merkezi Oyun Kafe yönetimi</p><input id="email" placeholder="Kullanıcı adı" type="text" autocomplete="username"><input id="pass" placeholder="Şifre" type="password" autocomplete="current-password"><button class="primary" onclick="signin()">Giriş yap</button><p id="error"></p></section>
+      <section id="login" class="box"><h1>Giriş</h1><p class="muted">Merkezi Oyun Kafe yönetimi</p><input id="email" placeholder="Kullanıcı adı" type="text" autocomplete="username"><input id="pass" placeholder="Şifre" type="password" autocomplete="current-password"><button class="primary" onclick="signin()">Giriş yap</button><p><a href="redy-ai.html">REDY AI ücretsiz pilotunu incele →</a></p><p id="error"></p></section>
       <section id="app" class="hidden">
         <section id="dashboardPanel"><h1 class="welcome">Hoş geldiniz, <span id="who">Yönetici</span> 👋</h1><p class="muted">Bugünkü oyun alanı durumunu buradan takip edebilirsiniz.</p>
         <div class="buttons"><button class="primary" onclick="showAdd()">＋ Çocuk Kaydı</button><button class="orange admin-only" onclick="showMember()">＋ Yeni Üyelik</button></div>

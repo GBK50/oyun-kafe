@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="REDY AI ücretsiz pilot: açıkça etiketlenmiş örnek verilerle işletme raporu önizlemesi.">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <meta name="referrer" content="no-referrer">
+  <title>REDY AI · Ücretsiz pilot</title>
+  <link rel="stylesheet" href="redy-ai.css">
+  <script src="redy-ai.js" defer></script>
+</head>
+<body>
+  <header><a href="./index.html" aria-label="REDY ana sayfa"><img src="redy-logo-transparent.png" alt="REDY" width="140"></a><a class="back" href="./index.html">← İşletme paneline dön</a></header>
+  <main>
+    <section class="intro"><div><p class="eyebrow">İŞLETMENİZE BİR BAKIŞ</p><h1>REDY <span>AI</span></h1><p class="lead">Günün sayılarını, anlaşılır bir rapora dönüştürün.</p></div><span class="badge">ÜCRETSİZ PİLOT</span></section>
+    <aside class="notice"><b>Örnek veri · Canlı AI kapalı</b><p>Bu sayfadaki tüm rakamlar ve metinler tanıtım amacıyla hazırlanmıştır. Gerçek işletme verisi veya Claude çıktısı değildir. Claude API kredisi olmadığı için bu pilot AI isteği göndermez ve ücret oluşturmaz.</p></aside>
+    <section class="workspace" aria-label="Örnek rapor">
+      <div class="controls"><div><h2>İşletme özeti</h2><p class="muted">Örnek bir dönem seçerek raporu inceleyin.</p></div><div><label for="period">Rapor dönemi</label><select id="period"><option value="day">Günlük örnek</option><option value="week">Haftalık örnek</option><option value="month">Aylık örnek</option></select></div></div>
+      <p id="periodLabel" class="period-label"></p>
+      <div class="metrics"><article><span>Ziyaret</span><strong id="visits">—</strong><small>Örnek giriş sayısı</small></article><article><span>Tahsilat</span><strong id="revenue">—</strong><small>Örnek toplam · kâr değildir</small></article><article><span>Ödeme işlemi</span><strong id="payments">—</strong><small>Örnek işlem sayısı</small></article></div>
+      <div class="report-grid"><article class="summary"><span class="tag">HAZIRLANMIŞ ÖRNEK METİN</span><h3>Rapor önizlemesi</h3><p id="answer"></p><p class="muted">Bu metin seçilen örnek sayılardan sabit bir şablonla oluşturulur. Önceki dönemlerle karşılaştırma veya neden analizi içermez.</p><div class="actions"><button id="copy" type="button">Örnek raporu kopyala</button><button id="download" type="button" class="secondary">Metin olarak indir</button></div><p id="status" role="status" aria-live="polite"></p></article>
+      <article class="details"><h3>Örnek ödeme dağılımı</h3><dl><div><dt>Nakit</dt><dd id="cash">—</dd></div><div><dt>Kart</dt><dd id="card">—</dd></div><div><dt>Diğer</dt><dd id="other">—</dd></div></dl><div class="hour"><span>Örnek en yoğun giriş saati</span><strong id="hour">—</strong><small id="hourVisits"></small></div></article></div>
+    </section>
+    <section class="next"><div><p class="eyebrow">BİR SONRAKİ ADIM</p><h2>Gerçek verilerle Claude raporu</h2><p>Canlı rapor henüz aktif değil. Açılmadan önce API kredisi, sunucu tarafı kullanım sınırı ve yönetici hesabıyla uçtan uca test tamamlanmalı.</p><button disabled aria-describedby="liveNote">Claude ile rapor oluştur · Aktif değil</button><p id="liveNote" class="muted">Bu düğme API çağrısı yapmaz. Mevcut işletme hesabınız ve kayıtlarınız bu sayfada kullanılmaz.</p></div><div class="privacy"><h3>Veri yaklaşımımız</h3><ul><li>Bu önizleme yalnızca kurgusal sayılar kullanır.</li><li>Mevcut canlı arka uç, aktif yönetici oturumu ister.</li><li>Rapor tasarımı Claude’a yalnızca dönem toplamlarını gönderir; çocuk ve veli bilgilerini göndermez.</li></ul></div></section>
+    <footer>REDY AI · Pilot önizlemesi · 12 Ekim 2026 <a href="./index.html">İşletme paneli →</a></footer>
+  </main>
+  <noscript>Örnek raporları görüntülemek için JavaScript’i etkinleştirin. Canlı AI bu pilotta kapalıdır.</noscript>
+</body>
+</html>
